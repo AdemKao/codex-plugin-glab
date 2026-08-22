@@ -17,7 +17,24 @@ MCP = PLUGIN / ".mcp.json"
 APP_TEMPLATE = PLUGIN / "app-template" / ".app.json.example"
 BUILDER = ROOT / "scripts" / "build_chatgpt_variant.py"
 MARKETPLACE = ROOT / ".agents" / "plugins" / "marketplace.json"
+MCP_PACKAGE = ROOT / "packages" / "mcp-server" / "package.json"
+VERSION_FILE = ROOT / "VERSION"
 APP_PLACEHOLDER = "REPLACE_WITH_GITLAB_APP_OR_CONNECTOR_ID"
+
+REQUIRED_MCP_FILES = [
+    ROOT / "packages" / "mcp-server" / "src" / "config.ts",
+    ROOT / "packages" / "mcp-server" / "src" / "gitlab-client.ts",
+    ROOT / "packages" / "mcp-server" / "src" / "policy.ts",
+    ROOT / "packages" / "mcp-server" / "src" / "register-tools.ts",
+    ROOT / "packages" / "mcp-server" / "src" / "server.ts",
+    ROOT / "packages" / "mcp-server" / "tests" / "config.test.ts",
+    ROOT / "packages" / "mcp-server" / "tests" / "policy.test.ts",
+    ROOT / "packages" / "mcp-server" / "tsconfig.json",
+    ROOT / "packages" / "mcp-server" / "README.md",
+    ROOT / ".env.example",
+    ROOT / "Dockerfile",
+    ROOT / "docker-compose.yml",
+]
 
 REQUIRED_DOC_PAIRS = [
     (ROOT / "README.md", ROOT / "README.zh-TW.md"),
@@ -69,12 +86,22 @@ def load_json_external(path: Path) -> dict:
         fail(f"invalid generated JSON in {path}: {exc}")
 
 
+def release_version() -> str:
+    if not VERSION_FILE.is_file():
+        fail("missing VERSION")
+    version = VERSION_FILE.read_text(encoding="utf-8").strip()
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        fail("VERSION must contain strict semver X.Y.Z")
+    return version
+
+
 def validate_manifest() -> None:
     data = load_json(MANIFEST)
+    version = release_version()
     if data.get("name") != "gitlab":
         fail("plugin name must be 'gitlab'")
-    if not re.fullmatch(r"\d+\.\d+\.\d+", str(data.get("version", ""))):
-        fail("plugin version must be strict semver X.Y.Z")
+    if data.get("version") != version:
+        fail("plugin version must match VERSION")
     if not data.get("description"):
         fail("plugin description is required")
     if not data.get("author", {}).get("name"):
@@ -119,8 +146,20 @@ def validate_mcp() -> None:
         fail(".mcp.json must define mcpServers.gitlab")
     if server.get("type") != "http":
         fail("default GitLab MCP transport must be http")
-    if server.get("url") != "https://gitlab.com/api/v4/mcp":
-        fail("default GitLab MCP URL must be https://gitlab.com/api/v4/mcp")
+    if server.get("url") != "http://127.0.0.1:3333/mcp":
+        fail("default GitLab MCP URL must target the bundled local self-host server")
+
+
+def validate_mcp_package() -> None:
+    version = release_version()
+    package = load_json(MCP_PACKAGE)
+    if package.get("version") != version:
+        fail("MCP package version must match VERSION")
+    if package.get("dependencies", {}).get("@modelcontextprotocol/server") is None:
+        fail("MCP package must depend on @modelcontextprotocol/server")
+    for path in REQUIRED_MCP_FILES:
+        if not path.is_file():
+            fail(f"missing MCP server file: {path.relative_to(ROOT)}")
 
 
 def validate_app_template() -> None:
@@ -207,7 +246,7 @@ def validate_docs() -> None:
 
     scaffold_marker = "[" + "TODO:"
     for path in ROOT.rglob("*"):
-        if path.is_file() and path.suffix.lower() in {".md", ".json", ".py", ".yml", ".yaml"}:
+        if path.is_file() and path.suffix.lower() in {".md", ".json", ".py", ".ts", ".yml", ".yaml"}:
             text = path.read_text(encoding="utf-8", errors="replace")
             if scaffold_marker in text:
                 fail(f"leftover scaffold placeholder in {path.relative_to(ROOT)}")
@@ -216,6 +255,7 @@ def validate_docs() -> None:
 def main() -> None:
     validate_manifest()
     validate_mcp()
+    validate_mcp_package()
     validate_app_template()
     validate_generated_variant()
     validate_marketplace()
