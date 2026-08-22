@@ -10,12 +10,31 @@ permissions:
   contents: read
 
 jobs:
-  plugin:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Validate plugin structure
+
+      - name: Validate repository structure
         run: python3 scripts/validate_plugin.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/mcp-server/package.json
+
+      - name: Install MCP server dependencies
+        working-directory: packages/mcp-server
+        run: npm install
+
+      - name: Test and build MCP server
+        working-directory: packages/mcp-server
+        run: npm run check
+
+      - name: Build production container
+        run: docker build -t codex-plugin-glab:test .
