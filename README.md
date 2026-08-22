@@ -1,16 +1,68 @@
 # codex-plugin-glab
 
+[![Validate](https://github.com/AdemKao/codex-plugin-glab/actions/workflows/validate.yml/badge.svg)](https://github.com/AdemKao/codex-plugin-glab/actions/workflows/validate.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitLab MCP](https://img.shields.io/badge/GitLab-MCP-FC6D26.svg)](https://docs.gitlab.com/user/model_context_protocol/mcp_server/)
+
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
-An open-source GitLab plugin for Codex, with a packaging path for ChatGPT Custom MCP Apps. The project follows the same hybrid principle as the official GitHub plugin: prefer structured remote integrations, then use local `git` + `glab` only where a local working tree or an MCP capability gap requires it.
+An open-source GitLab plugin for Codex, with a packaging path for ChatGPT Custom MCP Apps. It provides GitLab repository, issue, merge-request, and CI workflows while preferring GitLab's official MCP integration and using local `git` + `glab` only when local working-tree access or a capability fallback is required.
 
-> Status: **v0.2.0 / early preview**. GitLab MCP capabilities and ChatGPT Custom MCP App availability can change independently of this repository.
+> **Project status:** v0.2.0 / early preview. GitLab MCP and ChatGPT Custom MCP App capabilities can change independently of this repository.
 
-## The important architecture decision
+> **Third-party project:** this repository is not an official GitLab or OpenAI project and is not endorsed by either company.
 
-For GitLab.com, **you do not need to host your own MCP server**.
+## Quick start
 
-GitLab already provides the official remote MCP endpoint:
+### Codex
+
+Clone the repository and validate the plugin:
+
+```bash
+git clone https://github.com/AdemKao/codex-plugin-glab.git
+cd codex-plugin-glab
+python3 scripts/validate_plugin.py
+```
+
+Install the `plugins/gitlab` plugin through your Codex plugin/marketplace setup, then authenticate to GitLab's official MCP endpoint when prompted:
+
+```text
+https://gitlab.com/api/v4/mcp
+```
+
+For local publish operations, install and authenticate `glab` as a fallback:
+
+```bash
+glab auth login
+glab auth status
+```
+
+### ChatGPT Web
+
+Create a ChatGPT Custom MCP App that points to GitLab's official MCP endpoint, complete GitLab OAuth, then package a workspace-bound variant with your real app/connector ID:
+
+```bash
+python3 scripts/build_chatgpt_variant.py \
+  --app-id YOUR_GITLAB_APP_OR_CONNECTOR_ID
+```
+
+The generated package is written to `dist/gitlab-chatgpt/` and remains outside source control.
+
+See [ChatGPT App Integration](docs/chatgpt-app.md) for the full flow.
+
+## Supported surfaces
+
+| Surface | Current project path | Notes |
+| --- | --- | --- |
+| Codex Desktop / CLI | Supported | Uses bundled GitLab MCP plus local `git` / `glab` fallback |
+| ChatGPT Web | Supported where Custom MCP Apps are available | Bind a workspace app to GitLab official MCP |
+| ChatGPT mobile | Platform-dependent | See the current [capability matrix](docs/capability-matrix.md) |
+
+For the current plan and product limitations, always check the linked OpenAI and GitLab documentation rather than relying on an old README revision.
+
+## Why no custom MCP server?
+
+For GitLab.com, **you do not need to host your own MCP server**. GitLab provides the official remote endpoint:
 
 ```text
 https://gitlab.com/api/v4/mcp
@@ -34,9 +86,9 @@ Codex / ChatGPT
                 GitLab
 ```
 
-This repository owns workflow instructions, routing, safety, packaging, and local `git`/`glab` fallback logic. GitLab owns the GitLab API, official MCP server, and its OAuth-backed integration path.
+This repository owns workflow instructions, routing, safety, packaging, and local `git` / `glab` fallback logic. GitLab owns the GitLab API, official MCP server, and OAuth-backed GitLab integration path.
 
-## What it covers
+## Features
 
 - Browse and inspect GitLab projects/repositories.
 - Read repository files, branches, and commits.
@@ -49,72 +101,39 @@ This repository owns workflow instructions, routing, safety, packaging, and loca
 - Package a workspace-specific ChatGPT app-backed plugin variant without committing workspace IDs or tokens.
 - English-default documentation with Traditional Chinese equivalents.
 
-## Codex
+## Architecture
 
-The source plugin contains:
-
-```text
-plugins/gitlab/.mcp.json
-```
-
-which points to GitLab's official MCP endpoint. A normal Codex flow is therefore:
+The plugin follows a connector-first hybrid model:
 
 ```text
-install plugin
-    -> connect/login to GitLab MCP
-    -> GitLab OAuth
-    -> use GitLab skills and tools
+User request
+    |
+    v
+GitLab plugin skills
+    |
+    +--> GitLab official MCP
+    |      - projects
+    |      - issues
+    |      - merge requests
+    |      - repository files
+    |      - branches / commits
+    |      - pipelines / jobs
+    |
+    +--> local git + glab
+           - working tree
+           - stage / commit
+           - push
+           - current branch / remote context
+           - capability fallback
 ```
 
-No extra MCP server is required for GitLab.com.
-
-For local publish operations, the plugin can still use local `git` and `glab` for working-tree state, commit, and push.
-
-## ChatGPT Web
-
-ChatGPT connects external MCP integrations as **Apps**. For ChatGPT Web, create a Custom MCP App that points at:
-
-```text
-https://gitlab.com/api/v4/mcp
-```
-
-Complete GitLab OAuth and test the app in Developer Mode. After you have an app/connector ID that is valid in your workspace, create an app-bound plugin variant:
-
-```bash
-python3 scripts/build_chatgpt_variant.py \
-  --app-id YOUR_GITLAB_APP_OR_CONNECTOR_ID
-```
-
-The generated package is written to:
-
-```text
-dist/gitlab-chatgpt/
-```
-
-It contains a real `.app.json` and a copied `plugin.json` with:
-
-```json
-{
-  "apps": "./.app.json"
-}
-```
-
-The source plugin remains portable and does not commit your workspace-specific ID.
-
-Full setup: [docs/chatgpt-app.md](docs/chatgpt-app.md).
-
-## ChatGPT mobile
-
-As of **2026-08-23**, OpenAI documents Custom MCP Apps as **web-only**. Installing this plugin or hosting another MCP proxy cannot bypass that platform limitation.
-
-When OpenAI enables Custom MCP Apps on mobile, the expected migration path is to reuse the same plugin + GitLab official MCP integration; no GitLab-side backend rewrite should be required.
-
-See [docs/capability-matrix.md](docs/capability-matrix.md).
+See [Architecture](docs/architecture.md) for routing details.
 
 ## Repository layout
 
 ```text
 .agents/plugins/marketplace.json       Marketplace metadata
+.github/                               Community health, issue/PR templates, CI
 plugins/gitlab/
   .codex-plugin/plugin.json            Portable Codex plugin manifest
   .mcp.json                            GitLab official MCP declaration
@@ -124,9 +143,7 @@ plugins/gitlab/
 scripts/
   validate_plugin.py                   Source validation
   build_chatgpt_variant.py             ChatGPT app-bound package builder
-docs/
-  chatgpt-app.md                       ChatGPT Web setup
-  capability-matrix.md                 Codex/Web/mobile matrix
+docs/                                  English + Traditional Chinese docs
 dist/                                  Generated workspace variants (gitignored)
 ```
 
@@ -137,16 +154,16 @@ dist/                                  Generated workspace variants (gitignored)
 - A current Codex build with plugin and MCP support.
 - A GitLab account with access to the target projects.
 - `git` for local repository workflows.
-- `glab` is strongly recommended for local auth, MR fallbacks, and publish flows.
+- `glab` is strongly recommended for local authentication, MR fallbacks, and publish flows.
 
 ### ChatGPT
 
 - A ChatGPT plan/workspace and role that supports the Custom MCP capabilities you need.
-- Developer Mode for creating/testing a Custom MCP App.
+- Developer Mode where required for creating/testing a Custom MCP App.
 - A Custom MCP App connected to GitLab's official MCP endpoint.
-- For full write/modify actions, an eligible workspace/plan with those tools enabled.
+- An eligible plan/workspace for any write/modify tools you expect to use.
 
-## Local development install
+## Installation for local development
 
 ```bash
 git clone https://github.com/AdemKao/codex-plugin-glab.git
@@ -156,6 +173,8 @@ ln -sfn "$PWD/plugins/gitlab" ~/plugins/gitlab
 ```
 
 Then add the `gitlab` entry from `.agents/plugins/marketplace.json` to your personal marketplace configuration and restart Codex.
+
+The exact plugin discovery workflow may evolve with Codex, so prefer current Codex documentation when it differs from this development setup.
 
 ## Authentication
 
@@ -178,9 +197,7 @@ Never commit PATs, OAuth secrets, or ChatGPT workspace app IDs.
 
 ### GitLab Self-Managed / Dedicated
 
-The project can also target compatible GitLab Self-Managed/Dedicated MCP endpoints and `glab` hosts. This is separate from the question of whether you need to host an MCP server for GitLab.com—you do not.
-
-See [docs/self-managed.md](docs/self-managed.md).
+The project can also target compatible GitLab Self-Managed/Dedicated MCP endpoints and `glab` hosts. See [Self-Managed GitLab](docs/self-managed.md).
 
 ## Capability routing
 
@@ -207,13 +224,17 @@ See [docs/self-managed.md](docs/self-managed.md).
 - Never print or commit access tokens, OAuth secrets, or other credentials.
 - Keep workspace-specific ChatGPT app IDs in generated/managed configuration rather than the portable source plugin.
 
+See [Security Policy](SECURITY.md) for reporting and security expectations.
+
 ## Validation
+
+Validate the source plugin:
 
 ```bash
 python3 scripts/validate_plugin.py
 ```
 
-To smoke-test the ChatGPT package builder with a non-secret fake ID:
+Smoke-test the ChatGPT package builder with a non-secret test ID:
 
 ```bash
 python3 scripts/build_chatgpt_variant.py --app-id test_connector_123 --force
@@ -222,6 +243,8 @@ python3 scripts/build_chatgpt_variant.py --app-id test_connector_123 --force
 The builder writes only to ignored `dist/`.
 
 ## Documentation
+
+Start with the [documentation index](docs/README.md):
 
 - [Architecture](docs/architecture.md)
 - [Authentication](docs/authentication.md)
@@ -232,11 +255,15 @@ The builder writes only to ignored `dist/`.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) or [CONTRIBUTING.zh-TW.md](CONTRIBUTING.zh-TW.md).
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Traditional Chinese contribution guidance is available in [CONTRIBUTING.zh-TW.md](CONTRIBUTING.zh-TW.md).
 
-## Security
+## Support
 
-See [SECURITY.md](SECURITY.md). Do not open a public issue containing credentials or private repository data.
+For bug reports, feature requests, product-boundary questions, and security routing, see [SUPPORT.md](SUPPORT.md). Security vulnerabilities must not be reported in public issues.
+
+## Versioning and releases
+
+The project uses semantic versioning for the plugin manifest. User-visible changes are recorded in [CHANGELOG.md](CHANGELOG.md). Until a stable `1.0.0` release, minor versions may include compatibility changes as Codex, ChatGPT, GitLab MCP, and plugin packaging evolve.
 
 ## License
 
