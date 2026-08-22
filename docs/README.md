@@ -2,20 +2,25 @@
 
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
-Use this page as the documentation index for `codex-plugin-glab`.
+Use this page as the documentation index for `codex-plugin-glab` v0.3.0. The project contains both the ChatGPT/Codex plugin and a bundled self-hosted GitLab MCP server.
 
 ## Getting started
 
-- [Main README](../README.md) — project overview, quick start, requirements, and installation.
-- [Authentication](authentication.md) — GitLab MCP OAuth and CLI fallback authentication.
-- [ChatGPT App Integration](chatgpt-app.md) — bind a ChatGPT Custom MCP App to GitLab's official MCP endpoint.
-- [Capability Matrix](capability-matrix.md) — compare Codex, ChatGPT Web, and current mobile availability.
+- [Main README](../README.md) — project overview, Docker quick start, safety defaults, and plugin installation.
+- [Authentication](authentication.md) — MCP endpoint authentication and server-to-GitLab token handling.
+- [ChatGPT App Integration](chatgpt-app.md) — deploy the bundled MCP server as a remote HTTPS endpoint and connect it to ChatGPT.
+- [Capability Matrix](capability-matrix.md) — current server tools, authentication modes, and client integration paths.
 
 ## Architecture and operations
 
-- [Architecture](architecture.md) — routing between GitLab MCP and local `git` / `glab`.
-- [Self-Managed GitLab](self-managed.md) — GitLab Self-Managed / Dedicated considerations.
-- [Roadmap](roadmap.md) — planned compatibility, safety, and distribution work.
+- [Architecture](architecture.md) — plugin/server split, trust boundaries, policies, and local `git` / `glab` routing.
+- [Self-Managed GitLab](self-managed.md) — custom GitLab hosts, TLS, project scoping, and compatibility considerations.
+- [Roadmap](roadmap.md) — completed v0.3 foundation plus planned per-user OAuth and deeper GitLab workflows.
+
+## MCP server package
+
+- [`packages/mcp-server/README.md`](../packages/mcp-server/README.md) — runtime environment variables, tool groups, and local development commands.
+- [`.env.example`](../.env.example) — safe deployment configuration template.
 
 ## Project policies
 
