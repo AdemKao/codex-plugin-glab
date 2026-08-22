@@ -1,8 +1,8 @@
 {
   "name": "@codex-plugin-glab/mcp-server",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "Self-hosted GitLab MCP server for ChatGPT, Codex, and other MCP clients.",
+  "description": "Self-hosted GitLab MCP server with shared-token and per-user OAuth modes for ChatGPT, Codex, and other MCP clients.",
   "type": "module",
   "engines": {
     "node": ">=20"
