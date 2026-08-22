@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""Lightweight repository validation for codex-plugin-glab."""
+"""Repository validation for codex-plugin-glab."""
 
 from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gitlab"
 MANIFEST = PLUGIN / ".codex-plugin" / "plugin.json"
 MCP = PLUGIN / ".mcp.json"
+APP_TEMPLATE = PLUGIN / "app-template" / ".app.json.example"
+BUILDER = ROOT / "scripts" / "build_chatgpt_variant.py"
 MARKETPLACE = ROOT / ".agents" / "plugins" / "marketplace.json"
+APP_PLACEHOLDER = "REPLACE_WITH_GITLAB_APP_OR_CONNECTOR_ID"
 
 REQUIRED_DOC_PAIRS = [
     (ROOT / "README.md", ROOT / "README.zh-TW.md"),
@@ -20,6 +25,8 @@ REQUIRED_DOC_PAIRS = [
     (ROOT / "docs" / "architecture.md", ROOT / "docs" / "architecture.zh-TW.md"),
     (ROOT / "docs" / "authentication.md", ROOT / "docs" / "authentication.zh-TW.md"),
     (ROOT / "docs" / "self-managed.md", ROOT / "docs" / "self-managed.zh-TW.md"),
+    (ROOT / "docs" / "chatgpt-app.md", ROOT / "docs" / "chatgpt-app.zh-TW.md"),
+    (ROOT / "docs" / "capability-matrix.md", ROOT / "docs" / "capability-matrix.zh-TW.md"),
     (ROOT / "docs" / "roadmap.md", ROOT / "docs" / "roadmap.zh-TW.md"),
 ]
 
@@ -52,6 +59,8 @@ def validate_manifest() -> None:
         fail("skills path must be ./skills/")
     if data.get("mcpServers") != "./.mcp.json":
         fail("mcpServers must point to ./.mcp.json")
+    if "apps" in data:
+        fail("portable source manifest must not contain a workspace-specific apps binding")
 
     interface = data.get("interface") or {}
     for key in (
@@ -88,6 +97,54 @@ def validate_mcp() -> None:
         fail("default GitLab MCP transport must be http")
     if server.get("url") != "https://gitlab.com/api/v4/mcp":
         fail("default GitLab MCP URL must be https://gitlab.com/api/v4/mcp")
+
+
+def validate_app_template() -> None:
+    template = load_json(APP_TEMPLATE)
+    app_id = template.get("apps", {}).get("gitlab", {}).get("id")
+    if app_id != APP_PLACEHOLDER:
+        fail("app template must contain the documented GitLab app/connector placeholder")
+    if not BUILDER.is_file():
+        fail("missing scripts/build_chatgpt_variant.py")
+
+
+def validate_generated_variant() -> None:
+    with tempfile.TemporaryDirectory(prefix="codex-plugin-glab-") as temp_dir:
+        output = Path(temp_dir) / "gitlab-chatgpt"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(BUILDER),
+                "--app-id",
+                "test_connector_ci_123",
+                "--output",
+                str(output),
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            fail(f"ChatGPT variant builder failed: {result.stderr.strip()}")
+
+        generated_app = load_json_external(output / ".app.json")
+        generated_manifest = load_json_external(output / ".codex-plugin" / "plugin.json")
+        if generated_app.get("apps", {}).get("gitlab", {}).get("id") != "test_connector_ci_123":
+            fail("generated .app.json does not contain requested app ID")
+        if generated_manifest.get("apps") != "./.app.json":
+            fail("generated plugin manifest does not bind ./.app.json")
+        if (output / "app-template").exists():
+            fail("generated plugin should not include the source app-template directory")
+
+
+def load_json_external(path: Path) -> dict:
+    if not path.is_file():
+        fail(f"generated file missing: {path}")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        fail(f"invalid generated JSON in {path}: {exc}")
 
 
 def validate_marketplace() -> None:
@@ -138,6 +195,8 @@ def validate_docs() -> None:
 def main() -> None:
     validate_manifest()
     validate_mcp()
+    validate_app_template()
+    validate_generated_variant()
     validate_marketplace()
     validate_skills()
     validate_docs()

@@ -1,7 +1,7 @@
 {
   "name": "gitlab",
-  "version": "0.1.0",
-  "description": "Inspect GitLab projects, triage issues and merge requests, debug CI, and publish changes through a hybrid MCP and glab workflow.",
+  "version": "0.2.0",
+  "description": "Inspect GitLab projects, triage issues and merge requests, debug CI, and publish changes through GitLab MCP with safe Codex and ChatGPT app packaging workflows.",
   "author": {
     "name": "AdemKao",
     "url": "https://github.com/AdemKao"
@@ -17,14 +17,15 @@
     "issues",
     "ci",
     "pipelines",
-    "mcp"
+    "mcp",
+    "chatgpt"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "GitLab",
     "shortDescription": "Triage MRs, issues, CI, and publish GitLab changes",
-    "longDescription": "Use GitLab to inspect projects, review merge requests, address feedback, debug pipelines, manage issues, and prepare code changes through GitLab MCP with targeted local git and glab fallbacks.",
+    "longDescription": "Use GitLab to inspect projects, review merge requests, address feedback, debug pipelines, manage issues, and prepare code changes through GitLab MCP with targeted local git/glab fallbacks and optional ChatGPT app binding.",
     "developerName": "AdemKao",
     "category": "Developer Tools",
     "capabilities": [
