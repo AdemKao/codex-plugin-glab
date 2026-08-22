@@ -81,7 +81,7 @@ export class GitLabClient {
       }
 
       const responseType = options.responseType ?? "json";
-      const raw = responseType === "text" ? await response.text() : await response.text();
+      const raw = await response.text();
       let parsed: unknown = raw;
       if (responseType === "json" && raw) {
         try {
@@ -102,25 +102,22 @@ export class GitLabClient {
         );
       }
 
+      const pagination: GitLabPage<T>["pagination"] = {};
+      const nextPage = parsePositiveInt(response.headers.get("x-next-page"));
+      const page = parsePositiveInt(response.headers.get("x-page"));
+      const perPage = parsePositiveInt(response.headers.get("x-per-page"));
+      const total = parsePositiveInt(response.headers.get("x-total"));
+      const totalPages = parsePositiveInt(response.headers.get("x-total-pages"));
+
+      if (nextPage !== undefined) pagination.nextPage = nextPage;
+      if (page !== undefined) pagination.page = page;
+      if (perPage !== undefined) pagination.perPage = perPage;
+      if (total !== undefined) pagination.total = total;
+      if (totalPages !== undefined) pagination.totalPages = totalPages;
+
       return {
         data: parsed as T,
-        pagination: {
-          ...(parsePositiveInt(response.headers.get("x-next-page")) !== undefined
-            ? { nextPage: parsePositiveInt(response.headers.get("x-next-page")) }
-            : {}),
-          ...(parsePositiveInt(response.headers.get("x-page")) !== undefined
-            ? { page: parsePositiveInt(response.headers.get("x-page")) }
-            : {}),
-          ...(parsePositiveInt(response.headers.get("x-per-page")) !== undefined
-            ? { perPage: parsePositiveInt(response.headers.get("x-per-page")) }
-            : {}),
-          ...(parsePositiveInt(response.headers.get("x-total")) !== undefined
-            ? { total: parsePositiveInt(response.headers.get("x-total")) }
-            : {}),
-          ...(parsePositiveInt(response.headers.get("x-total-pages")) !== undefined
-            ? { totalPages: parsePositiveInt(response.headers.get("x-total-pages")) }
-            : {}),
-        },
+        pagination,
       };
     }
 
