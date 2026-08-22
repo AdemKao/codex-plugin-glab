@@ -7,7 +7,7 @@ description: Configure and troubleshoot GitLab access for this plugin. Use when 
 
 ## Goal
 
-Establish the least-privilege GitLab integration path before repository work. From v0.3.0, the primary remote path is the self-hosted MCP server bundled with this repository; GitLab's native MCP is optional, not required.
+Establish the least-privilege GitLab integration path before repository work. The primary remote path is the self-hosted MCP server bundled with this repository; GitLab native MCP is optional.
 
 ## Primary backend
 
@@ -21,21 +21,48 @@ Remote ChatGPT example:
 
 `https://gitlab-mcp.example.com/mcp`
 
-The MCP server talks to GitLab REST API v4 using the configured `GITLAB_HOST` and GitLab token. It supports GitLab.com and compatible Self-Managed/Dedicated hosts without requiring the GitLab native MCP feature.
+The MCP server talks to GitLab REST API v4 and supports GitLab.com plus compatible Self-Managed/Dedicated hosts without requiring GitLab native MCP.
 
-## Server configuration
+## Choose the authentication mode
 
-At minimum, configure the server outside chat/source control:
+### Shared-token
+
+Use for a trusted single-user/service-identity deployment:
 
 ```bash
+MCP_AUTH_MODE=shared-token
 GITLAB_HOST=https://gitlab.com
 GITLAB_TOKEN=<secret-from-secure-store>
-GITLAB_TOKEN_TYPE=private-token
+MCP_AUTH_TOKEN=<separate-mcp-bearer>
 ```
 
-Do not ask the user to paste a real token into chat. Prefer environment/secret-manager configuration.
+Do not ask users to paste a real GitLab token into chat. Configure tokens through environment/secret-management facilities.
 
-Keep the initial deployment read-only:
+### Per-user OAuth
+
+Use for a multi-user ChatGPT/Codex/remote-MCP deployment where each user should keep their own GitLab permissions:
+
+```bash
+MCP_AUTH_MODE=oauth
+PUBLIC_BASE_URL=https://gitlab-mcp.example.com
+GITLAB_HOST=https://gitlab.com
+GITLAB_OAUTH_CLIENT_ID=<gitlab-oauth-app-id>
+GITLAB_OAUTH_CLIENT_SECRET=<secret-store>
+OAUTH_ENCRYPTION_KEY=<base64-32-byte-key>
+OAUTH_STORE_PATH=/data/oauth-store.json
+```
+
+Create a GitLab OAuth Application with callback:
+
+`https://gitlab-mcp.example.com/oauth/gitlab/callback`
+
+OAuth mode exposes MCP Protected Resource Metadata and authorization-server discovery. Compatible clients should discover OAuth from an unauthenticated `/mcp` `401` rather than receiving a PAT from the user.
+
+The server uses PKCE S256 for both the downstream MCP authorization-code flow and the upstream GitLab authorization-code flow.
+
+## Safety policy
+
+Start read-only:
 
 ```bash
 GITLAB_WRITE_ENABLED=false
@@ -44,16 +71,19 @@ GITLAB_MERGE_ENABLED=false
 
 Use `GITLAB_ALLOWED_PROJECTS` when a deployment should be restricted to specific projects.
 
+In OAuth mode, write operations additionally require the user's `gitlab:write` OAuth scope. OAuth scope never overrides write/merge flags, project allowlists, or GitLab's own permissions.
+
 ## Codex path
 
-The bundled `.mcp.json` targets the local self-hosted endpoint at `http://127.0.0.1:3333/mcp`.
+The bundled `.mcp.json` targets `http://127.0.0.1:3333/mcp`.
 
 Before declaring setup complete:
 
 1. start the MCP server;
 2. verify `/healthz`;
-3. verify the MCP client can discover GitLab tools;
-4. run a harmless read such as `gitlab_get_current_user`, `gitlab_list_groups`, or `gitlab_list_projects`.
+3. verify MCP tool discovery;
+4. for OAuth, verify `/.well-known/oauth-protected-resource` and an unauthenticated `/mcp` returns `401` with OAuth discovery metadata;
+5. run a harmless read such as `gitlab_get_current_user`, `gitlab_list_groups`, or `gitlab_list_projects`.
 
 For local working-tree tasks, `git` and `glab` remain useful:
 
@@ -61,18 +91,21 @@ For local working-tree tasks, `git` and `glab` remain useful:
 glab auth status
 ```
 
-Use local `git`/`glab` for working-tree state, commit, push, and explicit capability gaps rather than duplicating those operations in the MCP server.
+Use local `git` / `glab` for working-tree state, commit, push, and explicit capability gaps.
 
 ## ChatGPT path
 
-ChatGPT needs a remote MCP endpoint reachable through the integration mechanism supported by the user's workspace.
+For per-user ChatGPT GitLab access:
 
-1. Deploy the bundled MCP server behind HTTPS.
-2. Protect the endpoint. Do not publish a server-side GitLab token behind an unauthenticated public MCP endpoint.
-3. Create a ChatGPT Custom MCP App pointing to the deployed `/mcp` URL.
-4. Configure the authentication method supported by the deployment/workspace.
-5. Scan tools and test harmless reads before enabling writes.
-6. If workspace-specific plugin/app packaging is needed, use the real app/connector ID with:
+1. deploy the bundled MCP server behind HTTPS;
+2. use `MCP_AUTH_MODE=oauth`;
+3. configure the GitLab OAuth Application and callback;
+4. create the ChatGPT Custom MCP App pointing to the deployed `/mcp` URL;
+5. let the client discover/start OAuth;
+6. authorize GitLab in the browser consent flow;
+7. test harmless reads before enabling writes.
+
+If workspace-specific plugin/app packaging is needed:
 
 ```bash
 python3 scripts/build_chatgpt_variant.py --app-id <workspace-app-or-connector-id>
@@ -80,39 +113,33 @@ python3 scripts/build_chatgpt_variant.py --app-id <workspace-app-or-connector-id
 
 Do not add workspace-specific IDs or credentials to the portable source plugin.
 
-ChatGPT plan, workspace-role, and surface support are platform-controlled and can change independently of this repository. Do not infer mobile/web availability from plugin installation alone.
+ChatGPT plan, workspace-role, and surface support are controlled by OpenAI and can change independently of this repository.
 
-## MCP endpoint authentication
+## OAuth persistence
 
-For a non-loopback server bind, the built-in guard expects `MCP_AUTH_TOKEN` unless `MCP_ALLOW_INSECURE_NO_AUTH=true` is explicitly configured.
+The v0.4 built-in OAuth store is encrypted and persistent but file-based/single-node.
 
-Only use insecure mode when another trusted authentication boundary already exists, such as a private tunnel or authenticated gateway.
-
-If the target client requires OAuth rather than a fixed bearer, place the MCP server behind an OAuth-capable gateway until per-user OAuth passthrough is implemented in this project.
+- Protect `OAUTH_ENCRYPTION_KEY` separately from the store.
+- Do not expose or commit the store.
+- Do not mount one writable store into multiple MCP replicas.
+- Existing OAuth sessions become unreadable if the encryption key is changed without migration.
 
 ## GitLab.com / Self-Managed / Dedicated
 
-Resolve the intended GitLab host from the user's GitLab URL, deployment configuration, or local remote. Set:
+Resolve the intended GitLab host from the user's URL, deployment configuration, or local remote:
 
 ```bash
 GITLAB_HOST=https://<gitlab-host>
 ```
 
-Do not silently send private project identifiers to `gitlab.com` when the intended remote belongs to another host.
+For OAuth mode, the GitLab OAuth Application must exist on that same GitLab instance.
 
-Self-Managed compatibility depends on the GitLab version and REST API endpoints used by each tool. If a capability is absent, fall back to host-aware `glab` / `glab api` only for the specific operation required.
+Do not silently send private project identifiers to `gitlab.com` when the intended remote belongs to another host. Self-Managed compatibility depends on the GitLab version and REST APIs used by each tool.
 
 ## Optional GitLab native MCP
 
-GitLab's own MCP endpoint may still be used independently when the target GitLab environment supports it and the user deliberately chooses it. It is not the default or a dependency of this repository's v0.3.0 architecture.
-
-## Credentials and scopes
-
-- Use the least-privileged GitLab token needed for enabled tools.
-- Read-only deployments should not receive write scopes solely because the binary contains write tools.
-- Never commit or print GitLab tokens, MCP auth tokens, OAuth secrets, or other credentials.
-- v0.3.0 uses one configured GitLab identity per MCP server; do not treat this as per-user authorization in an untrusted multi-user environment.
+GitLab native MCP can still be used independently when the target environment supports it and the user deliberately chooses it. It is not a dependency of this project's self-hosted server architecture.
 
 ## Verification
 
-Before declaring setup complete, verify a harmless read against the intended GitLab account/host. Do not validate authentication by creating, updating, merging, or deleting content.
+Before declaring setup complete, verify the expected identity with a harmless read. Do not validate authentication by creating, updating, merging, or deleting content.
