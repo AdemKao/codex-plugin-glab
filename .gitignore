@@ -9,3 +9,6 @@ __pycache__/
 .plugin-eval/
 .codex/
 dist/
+data/
+**/oauth-store.json
+**/oauth-store.json.tmp
