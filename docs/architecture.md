@@ -2,43 +2,80 @@
 
 [English](architecture.md) | [繁體中文](architecture.zh-TW.md)
 
-## Design choice
+## Overview
 
-This project mirrors the shape of the official Codex GitHub plugin rather than building a second GitLab API client inside the plugin.
+`codex-plugin-glab` has two first-class runtime pieces:
 
-The plugin has two execution planes:
+1. **Plugin layer** — Codex/ChatGPT workflow guidance, routing, safety rules, and local `git` / `glab` fallbacks.
+2. **Self-hosted MCP server** — an HTTP MCP server that exposes explicit GitLab tools and calls GitLab REST API v4.
 
-1. **GitLab hosted MCP** for structured remote operations.
-2. **Local `git` + `glab`** for working-tree state and operations that are inherently local or not exposed by the connected MCP version.
+```text
+ChatGPT / Codex / MCP client
+            |
+            | MCP
+            v
++-------------------------------+
+| Self-hosted MCP server        |
+| packages/mcp-server           |
+|                               |
+| tool schemas                  |
+| request validation            |
+| project allowlist             |
+| read/write/merge policy       |
+| GitLab API client             |
++---------------+---------------+
+                |
+                | HTTPS / GitLab REST API v4
+                v
+      GitLab.com / Self-Managed
+```
 
-This minimizes duplicated authentication and API code while still covering commit/push workflows.
+The GitLab native MCP server is optional. The bundled server does not depend on it.
 
-## Layers
+## Trust boundaries
 
-### Plugin manifest
+### MCP client -> MCP server
 
-`plugins/gitlab/.codex-plugin/plugin.json` describes the plugin, capabilities, skills, and MCP companion file.
+A remote deployment must have an authentication boundary. The built-in server supports an MCP bearer token and refuses an unauthenticated non-loopback bind unless insecure mode is explicitly acknowledged.
 
-### MCP declaration
+For production use, an OAuth-capable gateway, private tunnel, or other client-supported authentication layer can sit in front of the MCP server.
 
-`plugins/gitlab/.mcp.json` points to GitLab.com's hosted MCP endpoint. Codex handles the MCP OAuth session.
+### MCP server -> GitLab
 
-### Skills
+The server holds a GitLab access token and uses only explicit REST API routes required by registered tools. `GITLAB_HOST` selects GitLab.com or a Self-Managed/Dedicated instance.
 
-Skills provide routing, safety, and repeatable workflows. They do not hard-code a fixed set of MCP tool names beyond documented capability categories because the GitLab MCP surface changes by GitLab version.
+The server is not a generic arbitrary API proxy.
 
-### Local fallback
+## Policy layers
 
-`git` owns working-tree state, staging, commits, and pushes. `glab` provides GitLab-aware host/auth context and CLI/API fallbacks.
+All project-level operations pass through the project allowlist when `GITLAB_ALLOWED_PROJECTS` is configured.
 
-## Why not only `glab mcp serve`?
+Write operations require:
 
-GitLab CLI also provides an experimental local MCP server. It is useful, especially for Self-Managed environments, but its tool set and stability differ from the hosted MCP server. The default plugin therefore uses the hosted GitLab MCP endpoint and treats `glab` as the compatibility layer.
+```text
+GITLAB_WRITE_ENABLED=true
+```
 
-## Why not only REST API scripts?
+Merge additionally requires:
 
-A custom REST wrapper would duplicate GitLab's authentication, pagination, API evolution, and MCP work. The plugin instead delegates structured remote operations to GitLab's own MCP/API surfaces and focuses on high-quality Codex workflows.
+```text
+GITLAB_MERGE_ENABLED=true
+```
 
-## Future app/connector layer
+This separates normal collaboration writes from the more consequential merge action.
 
-A public ChatGPT/Codex Plugin Directory submission may require an app/connector packaging path beyond this local/open-source Codex bundle. That can be added without changing the skill architecture: the skills should continue to prefer the installed GitLab app/MCP surface and retain local git fallback for publish operations.
+## Local repository workflows
+
+The MCP server is for remote GitLab state. Local commit/push workflows still belong to the plugin/client environment:
+
+```text
+remote GitLab reads/writes -> MCP server
+local working tree         -> git
+local GitLab CLI fallback  -> glab
+```
+
+This keeps server-side credentials and remote API operations separate from local filesystem mutation.
+
+## Future OAuth model
+
+v0.3.0 uses a server-side GitLab token and is intended primarily for a single user or trusted workspace. A later version can add per-user OAuth passthrough without changing the tool layer: the authentication component can supply a user-scoped GitLab client while the registered tools and policy checks remain the same.
