@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible plugin, skill, MCP, or glab workflow problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include access tokens, private repository content, or other secrets."
+  - type: input
+    id: codex
+    attributes:
+      label: Codex version
+      placeholder: "codex --version"
+  - type: input
+    id: gitlab
+    attributes:
+      label: GitLab version / offering
+      placeholder: "GitLab.com or Self-Managed 19.x"
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Safe reproduction steps
+      description: Remove project secrets, tokens, and private data.
