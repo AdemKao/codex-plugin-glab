@@ -1,31 +1,51 @@
-# GitLab Self-Managed
+# GitLab Self-Managed / Dedicated
 
 [English](self-managed.md) | [繁體中文](self-managed.zh-TW.md)
 
-內建 MCP config 預設指向 GitLab.com。Self-Managed / Dedicated GitLab 通常使用：
+Bundled MCP Server 直接呼叫 GitLab REST API v4，因此不綁定 `gitlab.com`。
 
-```text
-https://<your-gitlab-host>/api/v4/mcp
-```
-
-## 建議設定
-
-1. 確認 GitLab instance/version 支援且允許 GitLab MCP Server。
-2. 在 Codex 加入該 instance MCP server，或在開發版 plugin 把 `.mcp.json` 改成該 instance。
-3. 使用 Codex MCP OAuth 登入。
-4. 同時設定 `glab` 作 fallback：
+## 設定 Host
 
 ```bash
-glab auth login --hostname gitlab.example.com
-glab auth status --hostname gitlab.example.com
+GITLAB_HOST=https://gitlab.example.com
+GITLAB_TOKEN=...
+GITLAB_TOKEN_TYPE=private-token
 ```
 
-## MCP 不可用時
+`GITLAB_HOST` 填 GitLab base URL，不要加 `/api/v4`；Server 會自行加入 API prefix。
 
-遠端 GitLab 操作使用 `glab` / `glab api`，本機修改、commit、push 使用 `git`。
+## Authentication
 
-不可因為 plugin 預設 endpoint 是 GitLab.com，就把 Self-Managed 的 private project path 或 credentials 傳到 GitLab.com。
+使用 target GitLab instance 與所需 APIs 支援的 token type。Personal access token 是最直接的初始設定；若 deployment 只需要有限 projects，可使用 project/group access token 縮小 scope。
 
-## 相容性
+OAuth access token：
 
-GitLab MCP capabilities 會依版本不同。Skills 採 capability-driven：以目前連線 instance 真正暴露的 MCP tools 為準，沒有就 fallback，不硬假設新版 tool 一定存在。
+```bash
+GITLAB_TOKEN_TYPE=bearer
+```
+
+## TLS 與 private network
+
+Production 建議 GitLab 與 MCP endpoint 都使用 HTTPS。若 Self-Managed GitLab 使用內部 CA，請正確設定 Node/container trust store，不要關閉 TLS verification。
+
+如果 GitLab 或 MCP Server 位於 private/on-premises network，請使用支援的 private tunnel、VPN、reverse proxy 或 gateway，不要為了 MCP 直接把內部服務廣泛公開。
+
+## Version compatibility
+
+目前 tools 使用常見 GitLab REST API v4 endpoints，涵蓋 projects、groups、issues、merge requests、repository branches/commits 與 CI pipelines/jobs。
+
+Self-Managed 不同版本的欄位與 endpoint behavior 可能有差異。如果遇到 incompatibility，請以 issue 提供 GitLab version 與去除敏感資料後的 error response。
+
+## Project scoping
+
+Shared Self-Managed instance 建議明確設定 allowlist：
+
+```bash
+GITLAB_ALLOWED_PROJECTS=42,team/backend,team/frontend
+```
+
+所有 project-level API call 都會先檢查 allowlist，project discovery 也會同步過濾。
+
+## Native GitLab MCP
+
+GitLab 官方 MCP 若環境可用仍可獨立使用，但從 v0.3.0 起已不是本專案 dependency。
