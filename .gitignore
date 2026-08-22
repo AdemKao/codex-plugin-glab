@@ -8,3 +8,4 @@ __pycache__/
 *.pyc
 .plugin-eval/
 .codex/
+dist/
