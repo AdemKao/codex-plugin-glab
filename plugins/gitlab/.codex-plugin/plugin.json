@@ -1,0 +1,46 @@
+{
+  "name": "gitlab",
+  "version": "0.1.0",
+  "description": "Inspect GitLab projects, triage issues and merge requests, debug CI, and publish changes through a hybrid MCP and glab workflow.",
+  "author": {
+    "name": "AdemKao",
+    "url": "https://github.com/AdemKao"
+  },
+  "homepage": "https://github.com/AdemKao/codex-plugin-glab",
+  "repository": "https://github.com/AdemKao/codex-plugin-glab",
+  "license": "MIT",
+  "keywords": [
+    "gitlab",
+    "glab",
+    "merge-request",
+    "code-review",
+    "issues",
+    "ci",
+    "pipelines",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "GitLab",
+    "shortDescription": "Triage MRs, issues, CI, and publish GitLab changes",
+    "longDescription": "Use GitLab to inspect projects, review merge requests, address feedback, debug pipelines, manage issues, and prepare code changes through GitLab MCP with targeted local git and glab fallbacks.",
+    "developerName": "AdemKao",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://gitlab.com/",
+    "privacyPolicyURL": "https://about.gitlab.com/privacy/",
+    "termsOfServiceURL": "https://about.gitlab.com/terms/",
+    "defaultPrompt": [
+      "Summarize open merge requests and issues in this GitLab project.",
+      "Review the current GitLab merge request and address feedback.",
+      "Commit my changes, push the branch, and open a GitLab merge request."
+    ],
+    "brandColor": "#FC6D26",
+    "screenshots": []
+  }
+}
