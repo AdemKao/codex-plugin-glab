@@ -1,40 +1,81 @@
-# 架構
+# Architecture
 
 [English](architecture.md) | [繁體中文](architecture.zh-TW.md)
 
-## 設計選擇
+## Overview
 
-本專案不是在 plugin 裡重做一套 GitLab API client，而是參考官方 Codex GitHub Plugin 的 hybrid 方向。
+`codex-plugin-glab` 現在有兩個一等公民：
 
-執行分成兩層：
+1. **Plugin layer**：Codex/ChatGPT workflow guidance、routing、安全規則，以及 local `git` / `glab` fallback。
+2. **Self-hosted MCP server**：透過 HTTP MCP 暴露明確 GitLab tools，並直接呼叫 GitLab REST API v4。
 
-1. **GitLab Hosted MCP**：處理遠端結構化操作。
-2. **本機 `git` + `glab`**：處理 working tree，以及本質上屬於 local 或目前 MCP 版本尚未提供的操作。
+```text
+ChatGPT / Codex / MCP client
+            |
+            | MCP
+            v
++-------------------------------+
+| Self-hosted MCP server        |
+| packages/mcp-server           |
+|                               |
+| tool schemas                  |
+| request validation            |
+| project allowlist             |
+| read/write/merge policy       |
+| GitLab API client             |
++---------------+---------------+
+                |
+                | HTTPS / GitLab REST API v4
+                v
+      GitLab.com / Self-Managed
+```
 
-這樣可以避免重複實作 authentication/API，同時保留 commit/push 能力。
+GitLab native MCP 變成 optional，bundled server 不依賴它。
 
-## 各層
+## Trust boundaries
 
-### Plugin manifest
+### MCP client -> MCP server
 
-`plugins/gitlab/.codex-plugin/plugin.json` 定義 plugin metadata、capabilities、skills 與 MCP companion file。
+Remote deployment 必須有 authentication boundary。內建 server 支援 MCP bearer token；若 bind 到非 loopback address，沒有 auth 時預設拒絕啟動，除非明確開啟 insecure mode。
 
-### MCP
+Production 可以在 MCP server 前面放 OAuth-capable gateway、private tunnel 或其他 client 支援的 authentication layer。
 
-`plugins/gitlab/.mcp.json` 預設指向 GitLab.com Hosted MCP endpoint，由 Codex 處理 MCP OAuth session。
+### MCP server -> GitLab
 
-### Skills
+Server 持有 GitLab access token，只呼叫已註冊 tool 所需要的 REST API route。`GITLAB_HOST` 可選 GitLab.com 或 Self-Managed/Dedicated instance。
 
-Skills 負責 routing、安全規則與重複 workflow。因為 GitLab MCP tools 會隨 GitLab 版本演進，因此不應假設所有版本都有同一組 tools。
+本 server 不提供任意 GitLab API proxy。
 
-### Local fallback
+## Policy layers
 
-`git` 負責 working tree、stage、commit、push；`glab` 負責 GitLab host/auth context 與 CLI/API fallback。
+設定 `GITLAB_ALLOWED_PROJECTS` 時，所有 project-level operation 都會先通過 allowlist。
 
-## 為什麼不是只用 `glab mcp serve`？
+Write operation 需要：
 
-GitLab CLI 的確也有 experimental local MCP server，對 Self-Managed 很有價值，但其 tool coverage 與穩定度和 Hosted MCP 不完全一致。因此預設採 Hosted MCP，`glab` 作 compatibility layer。
+```text
+GITLAB_WRITE_ENABLED=true
+```
 
-## 為什麼不自己包 REST API？
+Merge 還需要：
 
-自建 REST wrapper 會重複處理 authentication、pagination、API evolution 與 MCP 已經解決的問題。這個 plugin 把重點放在 Codex workflow 與安全 routing。
+```text
+GITLAB_MERGE_ENABLED=true
+```
+
+因此一般協作 write 與較高影響的 merge 會被分開授權。
+
+## Local repository workflow
+
+MCP Server 處理 remote GitLab state；local commit / push 仍屬於 plugin/client environment：
+
+```text
+remote GitLab reads/writes -> MCP server
+local working tree         -> git
+local GitLab CLI fallback  -> glab
+```
+
+這樣 server-side credential 與 remote API operation 不會和 local filesystem mutation 混在一起。
+
+## Future OAuth model
+
+v0.3.0 使用 server-side GitLab token，主要定位是 single-user 或 trusted workspace。未來加入 per-user OAuth passthrough 時，可以只替換 authentication/client creation 層，不需要重寫 tool schema 與 policy。

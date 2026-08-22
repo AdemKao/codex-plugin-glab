@@ -2,29 +2,54 @@
 
 [English](authentication.md) | [繁體中文](authentication.zh-TW.md)
 
-## Preferred: MCP OAuth
+v0.3.0 has two independent authentication boundaries: the MCP client talking to your server, and your server talking to GitLab.
 
-For GitLab.com, the plugin points to `https://gitlab.com/api/v4/mcp`. Use Codex's MCP login flow and approve only the access needed for your GitLab account/namespace.
+## 1. MCP client -> self-hosted server
 
-The plugin does not store a token in the repository.
+For a local loopback server, no MCP bearer is required by default.
 
-## CLI fallback
-
-Install and authenticate GitLab CLI:
+For a non-loopback bind, configure:
 
 ```bash
-glab auth login
-glab auth status
+MCP_AUTH_TOKEN=a-long-random-secret
 ```
 
-`glab` is preferred over copying a personal access token into shell history or project files.
+Clients that support custom HTTP headers can send:
 
-## Tokens
+```text
+Authorization: Bearer <MCP_AUTH_TOKEN>
+```
 
-If a specific Self-Managed or automation use case requires a personal/project/group access token, use the minimum scope needed by that workflow and store it in GitLab CLI or a credential manager/environment secret. Never commit it.
+If your target client expects OAuth instead of a fixed bearer, place the MCP server behind an OAuth-capable gateway or a supported private MCP tunnel.
 
-Typical read-only tasks should stay read-only. Do not grant `api` write access just to read repositories.
+`MCP_ALLOW_INSECURE_NO_AUTH=true` disables the built-in remote-auth guard and should only be used when a separate trusted authentication boundary already exists.
 
-## Multi-account / multi-host
+## 2. MCP server -> GitLab
 
-`glab` can manage host-specific authentication. Skills should derive the intended host from the GitLab URL or the current git remote and must not silently reuse GitLab.com credentials for a Self-Managed target.
+Set:
+
+```bash
+GITLAB_HOST=https://gitlab.com
+GITLAB_TOKEN=...
+GITLAB_TOKEN_TYPE=private-token
+```
+
+`private-token` sends GitLab's `PRIVATE-TOKEN` header. `bearer` sends an OAuth-compatible `Authorization: Bearer` header.
+
+Supported token sources can include personal, project, group, or OAuth access tokens as allowed by the target GitLab instance and API endpoint.
+
+Use the least privilege required for the enabled tools. Read-only deployments do not need write-capable scopes merely because write tools exist in the binary.
+
+## Credential handling
+
+- Never commit `.env` or real tokens.
+- Never place a GitLab token in plugin source, prompts, issue bodies, or CI logs.
+- Rotate a credential immediately if it is exposed.
+- Prefer a secret manager in hosted deployments.
+- Use separate credentials for development and production.
+
+## v0.3.0 identity model
+
+The configured GitLab token represents one GitLab identity for the whole MCP server. This is appropriate for a personal deployment or a trusted workspace with a deliberately shared service identity.
+
+It is not yet a multi-user identity-mapping system. Per-user GitLab OAuth passthrough is planned for a later release.

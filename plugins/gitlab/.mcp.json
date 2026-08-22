@@ -2,7 +2,7 @@
   "mcpServers": {
     "gitlab": {
       "type": "http",
-      "url": "https://gitlab.com/api/v4/mcp"
+      "url": "http://127.0.0.1:3333/mcp"
     }
   }
 }

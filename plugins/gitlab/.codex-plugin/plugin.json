@@ -1,7 +1,7 @@
 {
   "name": "gitlab",
-  "version": "0.2.0",
-  "description": "Inspect GitLab projects, triage issues and merge requests, debug CI, and publish changes through GitLab MCP with safe Codex and ChatGPT app packaging workflows.",
+  "version": "0.3.0",
+  "description": "Inspect and operate GitLab projects through the bundled self-hosted MCP server, with safe Codex and ChatGPT integration workflows.",
   "author": {
     "name": "AdemKao",
     "url": "https://github.com/AdemKao"
@@ -24,8 +24,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "GitLab",
-    "shortDescription": "Triage MRs, issues, CI, and publish GitLab changes",
-    "longDescription": "Use GitLab to inspect projects, review merge requests, address feedback, debug pipelines, manage issues, and prepare code changes through GitLab MCP with targeted local git/glab fallbacks and optional ChatGPT app binding.",
+    "shortDescription": "Self-hosted GitLab MCP for ChatGPT and Codex",
+    "longDescription": "Use the bundled self-hosted GitLab MCP server to inspect projects, review merge requests, manage issues, debug pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed, with local git/glab fallbacks where needed.",
     "developerName": "AdemKao",
     "category": "Developer Tools",
     "capabilities": [
@@ -37,9 +37,9 @@
     "privacyPolicyURL": "https://about.gitlab.com/privacy/",
     "termsOfServiceURL": "https://about.gitlab.com/terms/",
     "defaultPrompt": [
-      "Summarize open merge requests and issues in this GitLab project.",
+      "List the GitLab groups and projects I can access.",
       "Review the current GitLab merge request and address feedback.",
-      "Commit my changes, push the branch, and open a GitLab merge request."
+      "Create a GitLab issue or merge request after confirming the target."
     ],
     "brandColor": "#FC6D26",
     "screenshots": []
