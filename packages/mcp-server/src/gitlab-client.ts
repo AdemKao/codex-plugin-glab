@@ -1,3 +1,4 @@
+import { currentGitLabCredential } from "./auth-context.js";
 import type { ServerConfig } from "./config.js";
 
 export interface GitLabPage<T> {
@@ -36,9 +37,10 @@ export class GitLabClient {
   constructor(private readonly config: ServerConfig) {}
 
   private authHeaders(): Record<string, string> {
-    return this.config.gitlabTokenType === "bearer"
-      ? { Authorization: `Bearer ${this.config.gitlabToken}` }
-      : { "PRIVATE-TOKEN": this.config.gitlabToken };
+    const credential = currentGitLabCredential(this.config);
+    return credential.tokenType === "bearer"
+      ? { Authorization: `Bearer ${credential.token}` }
+      : { "PRIVATE-TOKEN": credential.token };
   }
 
   async request<T>(
