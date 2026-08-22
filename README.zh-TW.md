@@ -1,16 +1,68 @@
 # codex-plugin-glab
 
+[![Validate](https://github.com/AdemKao/codex-plugin-glab/actions/workflows/validate.yml/badge.svg)](https://github.com/AdemKao/codex-plugin-glab/actions/workflows/validate.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitLab MCP](https://img.shields.io/badge/GitLab-MCP-FC6D26.svg)](https://docs.gitlab.com/user/model_context_protocol/mcp_server/)
+
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
-這是一個開源的 GitLab Plugin，支援 Codex，並提供 ChatGPT Custom MCP App 的 packaging 路徑。設計原則接近官方 GitHub Plugin：遠端結構化操作優先使用整合工具；只有需要本機 working tree，或 MCP 尚未覆蓋某項能力時，才使用 local `git` + `glab` fallback。
+這是一個開源的 GitLab Plugin，支援 Codex，並提供 ChatGPT Custom MCP App 的 packaging 路徑。它涵蓋 GitLab repository、issue、merge request 與 CI workflow；遠端結構化操作優先使用 GitLab 官方 MCP，只有需要本機 working tree 或 capability fallback 時才使用 local `git` + `glab`。
 
-> 狀態：**v0.2.0 / early preview**。GitLab MCP 與 ChatGPT Custom MCP App 的平台能力可能會獨立更新。
+> **專案狀態：** v0.2.0 / early preview。GitLab MCP 與 ChatGPT Custom MCP App 的能力可能會獨立於此 repo 更新。
 
-## 最重要的架構決策
+> **第三方專案：** 本 repo 並非 GitLab 或 OpenAI 官方專案，也不代表獲得兩者背書。
 
-對 GitLab.com 而言，**你不需要自己架 MCP Server**。
+## 快速開始
 
-GitLab 已提供官方 remote MCP endpoint：
+### Codex
+
+Clone repo 並先執行驗證：
+
+```bash
+git clone https://github.com/AdemKao/codex-plugin-glab.git
+cd codex-plugin-glab
+python3 scripts/validate_plugin.py
+```
+
+透過 Codex plugin / marketplace 設定安裝 `plugins/gitlab`，接著依提示登入 GitLab 官方 MCP：
+
+```text
+https://gitlab.com/api/v4/mcp
+```
+
+若需要 local publish workflow，建議另外安裝並登入 `glab`：
+
+```bash
+glab auth login
+glab auth status
+```
+
+### ChatGPT Web
+
+建立一個指向 GitLab 官方 MCP endpoint 的 ChatGPT Custom MCP App，完成 GitLab OAuth 後，再用 workspace 真正的 app/connector ID 產生綁定版本：
+
+```bash
+python3 scripts/build_chatgpt_variant.py \
+  --app-id YOUR_GITLAB_APP_OR_CONNECTOR_ID
+```
+
+產生結果位於 `dist/gitlab-chatgpt/`，並保持在 source control 之外。
+
+完整流程請看 [ChatGPT App Integration](docs/chatgpt-app.zh-TW.md)。
+
+## 支援介面
+
+| 介面 | 目前專案路徑 | 說明 |
+| --- | --- | --- |
+| Codex Desktop / CLI | 支援 | Bundled GitLab MCP + local `git` / `glab` fallback |
+| ChatGPT Web | Custom MCP App 可用時支援 | 將 workspace app 綁定 GitLab 官方 MCP |
+| ChatGPT mobile | 依平台能力而定 | 請看最新 [Capability Matrix](docs/capability-matrix.zh-TW.md) |
+
+Plan 與產品限制會變動，請以 README 內連結的 OpenAI / GitLab 最新官方文件為準。
+
+## 為什麼不自己架 MCP Server？
+
+對 GitLab.com 而言，**你不需要自己架 MCP Server**。GitLab 已提供官方 remote endpoint：
 
 ```text
 https://gitlab.com/api/v4/mcp
@@ -34,11 +86,11 @@ Codex / ChatGPT
                 GitLab
 ```
 
-這個 repo 負責 workflow instructions、routing、安全規則、packaging，以及 local `git`/`glab` fallback。GitLab 負責 GitLab API、官方 MCP Server 與 OAuth-backed integration path。
+這個 repo 負責 workflow instructions、routing、安全規則、packaging，以及 local `git` / `glab` fallback。GitLab 負責 GitLab API、官方 MCP Server 與 OAuth-backed GitLab integration path。
 
-## 支援範圍
+## 功能
 
-- 瀏覽與檢查 GitLab projects/repositories。
+- 瀏覽與檢查 GitLab projects / repositories。
 - 讀取 repository files、branches、commits。
 - 列出、建立、更新、留言與整理 issues。
 - 列出、檢查、建立、更新、留言、review 與 merge Merge Requests。
@@ -49,74 +101,39 @@ Codex / ChatGPT
 - 產生 workspace-specific ChatGPT app-backed plugin variant，同時避免把 workspace ID 或 token commit 進 source repo。
 - 文件預設英文，並提供繁體中文版本。
 
-## Codex
+## 架構
 
-Source plugin 內建：
-
-```text
-plugins/gitlab/.mcp.json
-```
-
-它直接指向 GitLab 官方 MCP endpoint。因此一般 Codex 流程是：
+Plugin 採 connector-first hybrid model：
 
 ```text
-install plugin
-    -> connect/login to GitLab MCP
-    -> GitLab OAuth
-    -> use GitLab skills and tools
+User request
+    |
+    v
+GitLab plugin skills
+    |
+    +--> GitLab official MCP
+    |      - projects
+    |      - issues
+    |      - merge requests
+    |      - repository files
+    |      - branches / commits
+    |      - pipelines / jobs
+    |
+    +--> local git + glab
+           - working tree
+           - stage / commit
+           - push
+           - current branch / remote context
+           - capability fallback
 ```
 
-GitLab.com 不需要另外架一台 MCP Server。
-
-需要本機 publish 時，plugin 仍可使用 local `git` / `glab` 處理 working-tree state、commit 與 push。
-
-## ChatGPT Web
-
-ChatGPT 會把外部 MCP 整合視為 **App**。在 ChatGPT Web 中建立 Custom MCP App，endpoint 設成：
-
-```text
-https://gitlab.com/api/v4/mcp
-```
-
-完成 GitLab OAuth 並在 Developer Mode 測試。取得目標 workspace 可用的 app/connector ID 後，建立 app-bound plugin variant：
-
-```bash
-python3 scripts/build_chatgpt_variant.py \
-  --app-id YOUR_GITLAB_APP_OR_CONNECTOR_ID
-```
-
-產生結果：
-
-```text
-dist/gitlab-chatgpt/
-```
-
-裡面會包含真正的 `.app.json`，以及已加入：
-
-```json
-{
-  "apps": "./.app.json"
-}
-```
-
-的 plugin manifest copy。
-
-Source plugin 仍保持 portable，不會 commit 你的 workspace-specific ID。
-
-完整說明：[docs/chatgpt-app.zh-TW.md](docs/chatgpt-app.zh-TW.md)。
-
-## ChatGPT mobile
-
-截至 **2026-08-23**，OpenAI 文件明確說明 Custom MCP Apps **只支援 Web**。安裝這個 plugin 或多架一台 MCP proxy 都無法繞過這個平台限制。
-
-未來 OpenAI 開放 mobile Custom MCP Apps 時，預期可以沿用同一套 plugin + GitLab 官方 MCP，不需要重寫 GitLab backend。
-
-請看 [docs/capability-matrix.zh-TW.md](docs/capability-matrix.zh-TW.md)。
+詳細 routing 請看 [Architecture](docs/architecture.zh-TW.md)。
 
 ## Repo 結構
 
 ```text
 .agents/plugins/marketplace.json       Marketplace metadata
+.github/                               Community health、issue/PR templates、CI
 plugins/gitlab/
   .codex-plugin/plugin.json            Portable Codex plugin manifest
   .mcp.json                            GitLab 官方 MCP declaration
@@ -126,9 +143,7 @@ plugins/gitlab/
 scripts/
   validate_plugin.py                   Source validation
   build_chatgpt_variant.py             ChatGPT app-bound package builder
-docs/
-  chatgpt-app.md                       ChatGPT Web setup
-  capability-matrix.md                 Codex/Web/mobile matrix
+docs/                                  English + Traditional Chinese docs
 dist/                                  Generated workspace variants（gitignored）
 ```
 
@@ -138,15 +153,15 @@ dist/                                  Generated workspace variants（gitignored
 
 - 支援 plugin / MCP 的新版 Codex。
 - 可存取目標 projects 的 GitLab 帳號。
-- Local repository workflows 需要 `git`。
-- 強烈建議安裝 `glab`，用於 local auth、MR fallback 與 publish flow。
+- Local repository workflow 需要 `git`。
+- 強烈建議安裝 `glab`，用於 local authentication、MR fallback 與 publish flow。
 
 ### ChatGPT
 
-- 你的 ChatGPT plan/workspace/role 必須支援你需要的 Custom MCP 能力。
-- 建立與測試 Custom MCP App 需要 Developer Mode。
-- 建立一個連到 GitLab 官方 MCP endpoint 的 Custom MCP App。
-- 完整 write/modify actions 需要符合資格的 workspace/plan，並啟用對應 tools。
+- ChatGPT plan/workspace/role 必須支援需要的 Custom MCP 能力。
+- 建立與測試 Custom MCP App 時，需要相對應的 Developer Mode / workspace 權限。
+- Custom MCP App 需連到 GitLab 官方 MCP endpoint。
+- 預期使用 write/modify tool 時，需要符合資格的 plan/workspace 與對應權限。
 
 ## Local development install
 
@@ -157,7 +172,9 @@ mkdir -p ~/plugins ~/.agents/plugins
 ln -sfn "$PWD/plugins/gitlab" ~/plugins/gitlab
 ```
 
-接著把 `.agents/plugins/marketplace.json` 中的 `gitlab` entry 加到個人 marketplace 設定，然後重新啟動 Codex。
+接著把 `.agents/plugins/marketplace.json` 中的 `gitlab` entry 加到個人 marketplace 設定，再重新啟動 Codex。
+
+Codex plugin discovery 流程可能持續演進；若此開發安裝方式與新版 Codex 文件不同，請以新版 Codex 文件為準。
 
 ## Authentication
 
@@ -180,9 +197,7 @@ glab auth login
 
 ### GitLab Self-Managed / Dedicated
 
-本專案也能針對相容的 GitLab Self-Managed/Dedicated MCP endpoint 與 `glab` host 設定。這跟「GitLab.com 是否需要自己架 MCP」是兩件不同的事情；GitLab.com 不需要。
-
-請看 [docs/self-managed.zh-TW.md](docs/self-managed.zh-TW.md)。
+本專案也可針對相容的 GitLab Self-Managed / Dedicated MCP endpoint 與 `glab` host 設定。請看 [Self-Managed GitLab](docs/self-managed.zh-TW.md)。
 
 ## Capability routing
 
@@ -209,13 +224,17 @@ glab auth login
 - 不輸出或 commit access tokens、OAuth secrets 等 credentials。
 - Workspace-specific ChatGPT app IDs 放在 generated/managed configuration，不放 portable source plugin。
 
+安全回報與規則請看 [Security Policy](SECURITY.md)。
+
 ## Validation
+
+驗證 source plugin：
 
 ```bash
 python3 scripts/validate_plugin.py
 ```
 
-可以用非敏感 fake ID smoke-test builder：
+使用非敏感 test ID smoke-test ChatGPT package builder：
 
 ```bash
 python3 scripts/build_chatgpt_variant.py --app-id test_connector_123 --force
@@ -224,6 +243,8 @@ python3 scripts/build_chatgpt_variant.py --app-id test_connector_123 --force
 Builder 只會寫入被 ignore 的 `dist/`。
 
 ## 文件
+
+從 [文件索引](docs/README.zh-TW.md) 開始：
 
 - [Architecture](docs/architecture.zh-TW.md)
 - [Authentication](docs/authentication.zh-TW.md)
@@ -234,11 +255,15 @@ Builder 只會寫入被 ignore 的 `dist/`。
 
 ## 貢獻
 
-請看 [CONTRIBUTING.md](CONTRIBUTING.md) 或 [CONTRIBUTING.zh-TW.md](CONTRIBUTING.zh-TW.md)。
+歡迎貢獻。開 PR 前請先閱讀 [CONTRIBUTING.md](CONTRIBUTING.md) 或 [CONTRIBUTING.zh-TW.md](CONTRIBUTING.zh-TW.md)。
 
-## Security
+## 支援
 
-請看 [SECURITY.md](SECURITY.md)。不要在公開 issue 中貼 credentials 或 private repository data。
+Bug、feature request、產品能力邊界與 security routing 請看 [SUPPORT.zh-TW.md](SUPPORT.zh-TW.md)。安全漏洞不可透過公開 issue 回報。
+
+## Versioning 與 releases
+
+Plugin manifest 使用 semantic versioning。User-visible 變更記錄在 [CHANGELOG.md](CHANGELOG.md)。在穩定 `1.0.0` 前，Codex、ChatGPT、GitLab MCP 與 plugin packaging 演進可能造成 minor version 的 compatibility change。
 
 ## License
 

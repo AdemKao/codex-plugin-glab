@@ -22,12 +22,27 @@ APP_PLACEHOLDER = "REPLACE_WITH_GITLAB_APP_OR_CONNECTOR_ID"
 REQUIRED_DOC_PAIRS = [
     (ROOT / "README.md", ROOT / "README.zh-TW.md"),
     (ROOT / "CONTRIBUTING.md", ROOT / "CONTRIBUTING.zh-TW.md"),
+    (ROOT / "SUPPORT.md", ROOT / "SUPPORT.zh-TW.md"),
+    (ROOT / "docs" / "README.md", ROOT / "docs" / "README.zh-TW.md"),
     (ROOT / "docs" / "architecture.md", ROOT / "docs" / "architecture.zh-TW.md"),
     (ROOT / "docs" / "authentication.md", ROOT / "docs" / "authentication.zh-TW.md"),
     (ROOT / "docs" / "self-managed.md", ROOT / "docs" / "self-managed.zh-TW.md"),
     (ROOT / "docs" / "chatgpt-app.md", ROOT / "docs" / "chatgpt-app.zh-TW.md"),
     (ROOT / "docs" / "capability-matrix.md", ROOT / "docs" / "capability-matrix.zh-TW.md"),
     (ROOT / "docs" / "roadmap.md", ROOT / "docs" / "roadmap.zh-TW.md"),
+]
+
+REQUIRED_COMMUNITY_FILES = [
+    ROOT / "LICENSE",
+    ROOT / "CHANGELOG.md",
+    ROOT / "CODE_OF_CONDUCT.md",
+    ROOT / "CONTRIBUTING.md",
+    ROOT / "SECURITY.md",
+    ROOT / "SUPPORT.md",
+    ROOT / ".github" / "pull_request_template.md",
+    ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml",
+    ROOT / ".github" / "ISSUE_TEMPLATE" / "feature_request.yml",
+    ROOT / ".github" / "ISSUE_TEMPLATE" / "config.yml",
 ]
 
 
@@ -43,6 +58,15 @@ def load_json(path: Path) -> dict:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         fail(f"invalid JSON in {path.relative_to(ROOT)}: {exc}")
+
+
+def load_json_external(path: Path) -> dict:
+    if not path.is_file():
+        fail(f"generated file missing: {path}")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        fail(f"invalid generated JSON in {path}: {exc}")
 
 
 def validate_manifest() -> None:
@@ -138,15 +162,6 @@ def validate_generated_variant() -> None:
             fail("generated plugin should not include the source app-template directory")
 
 
-def load_json_external(path: Path) -> dict:
-    if not path.is_file():
-        fail(f"generated file missing: {path}")
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        fail(f"invalid generated JSON in {path}: {exc}")
-
-
 def validate_marketplace() -> None:
     data = load_json(MARKETPLACE)
     plugins = data.get("plugins")
@@ -177,6 +192,12 @@ def validate_skills() -> None:
             fail(f"skill frontmatter missing name/description in {path.relative_to(ROOT)}")
 
 
+def validate_community_files() -> None:
+    for path in REQUIRED_COMMUNITY_FILES:
+        if not path.is_file():
+            fail(f"missing community file: {path.relative_to(ROOT)}")
+
+
 def validate_docs() -> None:
     for english, zh_tw in REQUIRED_DOC_PAIRS:
         if not english.is_file():
@@ -199,6 +220,7 @@ def main() -> None:
     validate_generated_variant()
     validate_marketplace()
     validate_skills()
+    validate_community_files()
     validate_docs()
     print("codex-plugin-glab validation passed")
 
