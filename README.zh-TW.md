@@ -5,98 +5,183 @@
 
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
-這是一個提供給 **ChatGPT、Codex 與其他 MCP Client** 使用的開源 GitLab 整合。Repo 現在有兩個一等公民：
+這是一個提供給 **ChatGPT、Codex 與其他 MCP Client** 使用的開源 GitLab 整合。Repo 有兩個一等公民：
 
-1. GitLab Plugin：負責 workflow skills、安全 routing 與本機 `git` / `glab` fallback；
-2. Self-hosted GitLab MCP Server：直接呼叫 GitLab REST API。
+1. GitLab Plugin：負責 workflow skills、安全 routing 與 local `git` / `glab` fallback；
+2. Self-hosted GitLab MCP Server：直接透過 GitLab REST API 操作 GitLab。
 
-> **狀態：** v0.3.0 / early preview。
+> **狀態：** v0.4.0 / early preview。
 >
 > **第三方專案：** 本 repo 並非 GitLab 或 OpenAI 官方專案，也不代表獲得兩者背書。
 
-## 為什麼改成自架 MCP Server
+## 為什麼要 self-host
 
-GitLab 有官方 MCP，但實際可用性與 prerequisite 可能讓部分 GitLab.com group 或 Self-Managed 環境無法使用。因此 `codex-plugin-glab` 從 v0.3.0 起不再依賴 GitLab native MCP。
+GitLab native MCP 的可用性與 group / instance prerequisite 不一定適合每個 GitLab.com 或 Self-Managed 環境，因此本專案直接提供自己的 MCP Server；GitLab native MCP 改成 optional，而不是必要依賴。
 
-Bundled MCP Server 使用標準 GitLab REST API，所以同一套程式可以連 GitLab.com、GitLab Self-Managed 或 GitLab Dedicated；實際能力取決於 GitLab 版本與設定 token 的權限。
+Bundled server 可連 GitLab.com、GitLab Self-Managed 與 GitLab Dedicated；實際支援能力取決於目標 GitLab 版本是否提供相對應 REST API。
 
 ## 架構
 
 ```text
 ChatGPT / Codex / MCP client
             |
-            | MCP over HTTP
+            | MCP over HTTP + OAuth 或 shared bearer
             v
-+-------------------------------+
-| codex-plugin-glab MCP server  |
-| - tool schemas                |
-| - auth boundary               |
-| - read/write policy           |
-| - project allowlist           |
-+---------------+---------------+
-                |
-                | GitLab REST API v4
-                v
-      GitLab.com / Self-Managed
++-----------------------------------+
+| codex-plugin-glab MCP server      |
+| - MCP tool schemas                |
+| - OAuth / auth boundary           |
+| - read/write/merge policy         |
+| - project allowlist               |
++----------------+------------------+
+                 |
+                 | per-user OAuth token
+                 | 或 shared service token
+                 v
+       GitLab REST API v4
+                 |
+                 v
+       GitLab.com / Self-Managed
 ```
 
-Codex Plugin 仍會提供 GitLab-specific skills；當任務需要 local working tree、commit 或 push 時，仍可使用 `git` / `glab` fallback。
+Codex Plugin 在需要 local working tree、commit 或 push 時，仍可使用 `git` / `glab`。
 
-## 快速開始：啟動 MCP Server
+## Authentication 模式
 
-```bash
-git clone https://github.com/AdemKao/codex-plugin-glab.git
-cd codex-plugin-glab
-cp .env.example .env
-```
+### 1. Shared-token mode
 
-至少設定：
+與 v0.3 相容。整個 MCP deployment 共用一個 GitLab identity。
 
 ```bash
+MCP_AUTH_MODE=shared-token
 GITLAB_HOST=https://gitlab.com
 GITLAB_TOKEN=your-token
 MCP_AUTH_TOKEN=a-long-random-secret
 ```
 
-啟動：
+適合單一使用者、CI/service integration，或明確希望整個 trusted workspace 使用同一個 service identity 的情境。
+
+### 2. Per-user OAuth mode
+
+每個 ChatGPT / Codex / MCP user 都授權自己的 GitLab identity；MCP Server 不再需要共用的 `GITLAB_TOKEN`。
+
+先在 GitLab 建立 OAuth Application，callback 設為：
+
+```text
+https://gitlab-mcp.example.com/oauth/gitlab/callback
+```
+
+接著設定：
 
 ```bash
+MCP_AUTH_MODE=oauth
+MCP_HOST=0.0.0.0
+PUBLIC_BASE_URL=https://gitlab-mcp.example.com
+GITLAB_HOST=https://gitlab.com
+GITLAB_OAUTH_CLIENT_ID=...
+GITLAB_OAUTH_CLIENT_SECRET=...
+OAUTH_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+OAUTH_STORE_PATH=/data/oauth-store.json
+```
+
+OAuth 流程：
+
+```text
+MCP client
+   |
+   | Protected Resource Metadata
+   v
+codex-plugin-glab OAuth gateway
+   |
+   | authorization code + PKCE
+   v
+GitLab OAuth
+   |
+   | 該使用者的 GitLab access/refresh token
+   v
+Encrypted MCP OAuth store
+   |
+   | MCP access/refresh token
+   v
+MCP client -> /mcp -> 以該使用者身分呼叫 GitLab
+```
+
+Server 在 MCP client 與 GitLab 兩段 authorization-code flow 都使用 PKCE S256。目前 MCP client 可使用 Dynamic Client Registration；後續會補 CIMD，作為新版 MCP registration path。
+
+## Docker 快速開始
+
+```bash
+git clone https://github.com/AdemKao/codex-plugin-glab.git
+cd codex-plugin-glab
+cp .env.example .env
+# 編輯 .env，選 shared-token 或 oauth
 docker compose up -d --build
 curl http://127.0.0.1:3333/healthz
 ```
 
-Local MCP endpoint：
+MCP endpoint：
 
 ```text
 http://127.0.0.1:3333/mcp
 ```
 
-若要讓 ChatGPT 從遠端連線，將同一個 container 部署到 HTTPS endpoint，再把 `https://.../mcp` 設定到 ChatGPT Custom MCP App。不要把內含 server-side GitLab token 的 MCP endpoint 以 unauthenticated public service 方式直接暴露。
+若要讓 ChatGPT 或其他 remote MCP client 使用，請部署成 HTTPS endpoint，再使用 `https://.../mcp`。
+
+## OAuth endpoints
+
+`MCP_AUTH_MODE=oauth` 時會提供：
+
+```text
+/.well-known/oauth-protected-resource
+/.well-known/oauth-authorization-server
+/oauth/register
+/oauth/authorize
+/oauth/token
+/oauth/gitlab/callback
+/mcp
+```
+
+未登入直接呼叫 `/mcp` 會得到 `401`，`WWW-Authenticate` 會指向 Protected Resource Metadata，讓 MCP client 啟動 OAuth discovery。
 
 ## 安全預設
 
-MCP Server 預設 read-only：
+Server 預設 read-only：
 
 ```bash
 GITLAB_WRITE_ENABLED=false
 GITLAB_MERGE_ENABLED=false
 ```
 
-可選擇限制允許操作的 project：
+可選擇限制 project：
 
 ```bash
 GITLAB_ALLOWED_PROJECTS=123,group/backend,group/frontend
 ```
 
-一般 write tool 需要 `GITLAB_WRITE_ENABLED=true`；MR merge 還要再另外設定 `GITLAB_MERGE_ENABLED=true`。因此開啟 issue/MR 寫入，不會順便把 merge 權限一起開啟。
+一般 write tool 需要 `GITLAB_WRITE_ENABLED=true`；MR merge 還需要 `GITLAB_MERGE_ENABLED=true`。
 
-非 loopback bind 預設需要 `MCP_AUTH_TOKEN`。只有當你明確設定 `MCP_ALLOW_INSECURE_NO_AUTH=true` 時才允許無 MCP auth 對外 bind；這個模式只應使用在外層已經有 authentication 的 private tunnel / gateway。
+OAuth 還多一層獨立限制：真正送出非 GET GitLab API 前，session 必須具備 `gitlab:write` scope。即使 client 要求更大的 OAuth scope，也無法繞過 server-wide write / merge / project allowlist policy。
+
+## OAuth Security
+
+- Production `PUBLIC_BASE_URL` 必須使用 HTTPS。
+- MCP client -> MCP server 使用 PKCE S256。
+- MCP server -> GitLab OAuth 同樣使用 PKCE S256。
+- GitLab access / refresh token 使用 AES-256-GCM 加密後才持久化。
+- MCP authorization code、access token、refresh token 在 store 中只保存 SHA-256 hash。
+- Dynamic registration 的 confidential client secret 只保存 scrypt hash。
+- OAuth state 與 authorization code 都是 single-use 且短效。
+- MCP refresh token 每次使用都會 rotation。
+- GitLab access token 到期前會自動 refresh。
+- Docker Compose 會把 encrypted store 持久化在 `/data`；`OAUTH_ENCRYPTION_KEY` 必須和該 volume 分開保護。
+
+目前 built-in OAuth store 是單 process / 單節點檔案型 store。不要把同一個 store file 直接掛給多個 MCP replicas；若要做 HA / horizontal scaling，後續應改成支援 locking/transaction 的共享儲存 backend。
 
 ## 支援的 MCP Tools
 
 ### Read
 
-- 目前 GitLab user
+- 目前 authenticated GitLab user
 - groups / projects
 - project metadata
 - branches / commits
@@ -110,33 +195,15 @@ GITLAB_ALLOWED_PROJECTS=123,group/backend,group/frontend
 - 建立、更新、留言 issue
 - 建立、更新、留言 merge request
 - 建立 branch
-- merge merge request（需額外 merge flag）
+- merge merge request（需額外 merge safety flag）
 
-Server 不提供任意 GitLab API proxy，因此 MCP client 只能呼叫已明確定義與驗證的 tools。
-
-## GitLab Authentication
-
-v0.3.0 先支援 server-side GitLab token：
-
-```bash
-GITLAB_TOKEN_TYPE=private-token
-GITLAB_TOKEN=...
-```
-
-或：
-
-```bash
-GITLAB_TOKEN_TYPE=bearer
-GITLAB_TOKEN=...
-```
-
-請使用能滿足所啟用 tools 的最小權限 token。Per-user OAuth passthrough 會放到後續版本；v0.3.0 主要定位是 single-user 或 trusted-workspace deployment。
+Server 不提供任意 GitLab API proxy，只允許已定義並驗證的 MCP tools。
 
 ## ChatGPT
 
-ChatGPT 需要連 remote MCP server。將本 repo 的 MCP Server 部署成 HTTPS endpoint、配置支援的 authentication layer，接著在 ChatGPT 建立 Custom MCP App 並 Scan Tools。
+若要讓不同 ChatGPT 使用者各自使用自己的 GitLab 權限，建議以 `MCP_AUTH_MODE=oauth` 部署到 HTTPS endpoint，然後建立指向 `/mcp` 的 Custom MCP App。使用者應透過 OAuth 登入 GitLab，而不是把 PAT 提供給 ChatGPT 或其他 MCP client。
 
-ChatGPT plan / workspace 能力由 OpenAI 控制，可能獨立於此 repo 改變。整合流程與安全注意事項請看 [docs/chatgpt-app.zh-TW.md](docs/chatgpt-app.zh-TW.md)。
+OpenAI 的 plan/workspace availability 可能獨立於本 repo 改變。完整說明請看 [docs/chatgpt-app.zh-TW.md](docs/chatgpt-app.zh-TW.md)。
 
 ## Codex Plugin
 
@@ -159,7 +226,7 @@ mkdir -p ~/plugins ~/.agents/plugins
 ln -sfn "$PWD/plugins/gitlab" ~/plugins/gitlab
 ```
 
-接著將 `.agents/plugins/marketplace.json` 裡的 `gitlab` entry 加入個人 marketplace 設定並重啟 Codex。
+接著把 `.agents/plugins/marketplace.json` 裡的 `gitlab` entry 加到個人 marketplace 設定並重啟 Codex。
 
 ## Repo 結構
 
@@ -167,6 +234,10 @@ ln -sfn "$PWD/plugins/gitlab" ~/plugins/gitlab
 .agents/plugins/marketplace.json
 plugins/gitlab/                 # ChatGPT/Codex plugin assets 與 skills
 packages/mcp-server/            # self-hosted GitLab MCP server
+  src/auth-context.ts
+  src/oauth-crypto.ts
+  src/oauth-store.ts
+  src/oauth-gateway.ts
 Dockerfile
 docker-compose.yml
 .env.example
@@ -196,6 +267,8 @@ Production image：
 ```bash
 docker build -t codex-plugin-glab .
 ```
+
+CI 在 merge 前必須通過 repository validation、全部 MCP unit tests、TypeScript strict build 與 production Docker build。
 
 ## 文件
 

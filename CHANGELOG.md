@@ -8,10 +8,40 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 
 ### Planned
 
-- Per-user OAuth passthrough between MCP clients and GitLab.
+- Client ID Metadata Documents (CIMD) support as the long-term replacement for Dynamic Client Registration.
 - Additional repository file/write and MR review/approval tools.
 - Broader GitLab Self-Managed compatibility fixtures.
 - Capability probing across GitLab versions.
+
+## [0.4.0] - 2026-08-23
+
+### Added
+
+- Per-user OAuth mode for ChatGPT, Codex, and other remote MCP clients while retaining the v0.3 shared-token deployment mode.
+- MCP OAuth Protected Resource Metadata and authorization-server metadata endpoints.
+- Dynamic Client Registration for current MCP-client compatibility.
+- Mandatory downstream PKCE S256 and an independent GitLab authorization-code + PKCE flow.
+- Per-user GitLab identity resolution, MCP access/refresh token issuance, refresh-token rotation, and automatic GitLab token refresh.
+- Encrypted persistent OAuth state for registered clients, authorization transactions, authorization codes, and sessions.
+- Persistent `/data` Docker volume and runtime permissions for the encrypted OAuth store.
+- OAuth tests covering configuration, PKCE, encrypted persistence, discovery metadata, DCR, and write-scope gating.
+
+### Changed
+
+- GitLab REST credentials are now resolved per MCP request in OAuth mode instead of being permanently bound to one server-wide token.
+- `MCP_AUTH_MODE` now selects `shared-token` or `oauth`; `shared-token` remains the backward-compatible default.
+- OAuth deployments use `PUBLIC_BASE_URL`, a GitLab OAuth application, and `OAUTH_ENCRYPTION_KEY` instead of `MCP_AUTH_TOKEN` and `GITLAB_TOKEN`.
+- GitLab API write requests in OAuth mode require both server-side write policy and the requesting OAuth session's `gitlab:write` scope.
+- The bundled server reports v0.4.0 and keeps the plugin/MCP package/release version synchronized through `VERSION`.
+
+### Security
+
+- GitLab OAuth access and refresh tokens are encrypted at rest with AES-256-GCM.
+- MCP authorization codes, access tokens, and refresh tokens are persisted only as SHA-256 hashes.
+- Dynamically registered confidential client secrets are stored as scrypt hashes.
+- OAuth state is single-use and time-limited; authorization codes are single-use and time-limited.
+- Production OAuth origins require HTTPS, redirect URIs are validated and matched against the registered client, and OAuth responses include the issuer (`iss`).
+- The existing `GITLAB_WRITE_ENABLED`, `GITLAB_MERGE_ENABLED`, and project allowlist controls remain authoritative regardless of OAuth scopes.
 
 ## [0.3.0] - 2026-08-23
 

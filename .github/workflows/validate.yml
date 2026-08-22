@@ -20,7 +20,9 @@ jobs:
           python-version: "3.12"
 
       - name: Validate repository structure
-        run: python3 scripts/validate_plugin.py
+        run: |
+          python3 scripts/validate_plugin.py
+          python3 scripts/validate_oauth.py
 
       - uses: actions/setup-node@v4
         with:

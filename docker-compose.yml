@@ -6,9 +6,14 @@ services:
       - .env
     ports:
       - "3333:3333"
+    volumes:
+      - gitlab-mcp-data:/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3333/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  gitlab-mcp-data:

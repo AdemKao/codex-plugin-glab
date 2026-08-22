@@ -2,68 +2,88 @@
 
 [English](chatgpt-app.md) | [繁體中文](chatgpt-app.zh-TW.md)
 
-ChatGPT 必須連到 **remote MCP endpoint**。v0.3.0 請部署本 repo bundled MCP Server，ChatGPT 連這個 endpoint，不再以 GitLab native MCP 作為必要路徑。
+v0.4 若要提供多人 ChatGPT 使用，建議使用 bundled MCP Server 的 **per-user OAuth mode**。ChatGPT 連到你的 HTTPS `/mcp` endpoint，每個使用者再透過 server 內建 OAuth flow 分別授權自己的 GitLab account。
 
 ## Flow
 
 ```text
 ChatGPT Custom MCP App
         |
-        | HTTPS / MCP
+        | HTTPS / MCP + OAuth discovery
         v
 https://gitlab-mcp.example.com/mcp
         |
-        | GitLab REST API v4
+        | built-in OAuth gateway
         v
-GitLab.com / Self-Managed
+GitLab OAuth
+        |
+        | per-user GitLab token
+        v
+GitLab REST API v4
 ```
 
-## 1. 部署 MCP Server
+## 1. 建立 GitLab OAuth Application
 
-可使用 root Dockerfile 或其他支援 Node 的 hosting。
+在 MCP Server 要連的 GitLab instance 建立一個 OAuth Application。
 
-Server-side GitLab 設定至少需要：
+Callback URI：
+
+```text
+https://gitlab-mcp.example.com/oauth/gitlab/callback
+```
+
+Application ID 與 secret 請放 deployment secret manager，不要放進 plugin package 或 ChatGPT prompt。
+
+## 2. 以 OAuth mode 部署 MCP Server
 
 ```bash
+MCP_AUTH_MODE=oauth
+MCP_HOST=0.0.0.0
+PUBLIC_BASE_URL=https://gitlab-mcp.example.com
 GITLAB_HOST=https://gitlab.com
-GITLAB_TOKEN=...
-GITLAB_TOKEN_TYPE=private-token
-```
+GITLAB_OAUTH_CLIENT_ID=...
+GITLAB_OAUTH_CLIENT_SECRET=...
+OAUTH_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+OAUTH_STORE_PATH=/data/oauth-store.json
 
-一開始建議保持 read-only：
-
-```bash
 GITLAB_WRITE_ENABLED=false
 GITLAB_MERGE_ENABLED=false
 ```
 
-將 MCP route 透過 HTTPS 對外，例如：
+請部署在 HTTPS 後面。`PUBLIC_BASE_URL` 必須和 user / MCP client 實際可以連線的 public origin 一致。
+
+Root Docker Compose 會持久化 `/data` 裡的 encrypted OAuth store。Encryption key 要和 volume 分開保護。
+
+## 3. 加到 ChatGPT 前先驗證 OAuth discovery
+
+可以檢查：
+
+```text
+GET https://gitlab-mcp.example.com/.well-known/oauth-protected-resource
+GET https://gitlab-mcp.example.com/.well-known/oauth-authorization-server
+```
+
+未登入呼叫：
 
 ```text
 https://gitlab-mcp.example.com/mcp
 ```
 
-Infrastructure health check 可使用 `/healthz`。
+應該得到 `401`，而且 `WWW-Authenticate` 要包含 `resource_metadata=...`。
 
-## 2. 保護 remote endpoint
+OAuth mode 如果 `/mcp` 可以匿名存取，不應視為部署完成。
 
-不要把持有 GitLab token 的 server 直接以 unauthenticated public endpoint 方式發布。
+## 4. 建立 ChatGPT Custom MCP App
 
-內建 server 支援 `MCP_AUTH_TOKEN`，適合能送固定 Authorization bearer header 的 client。若你目前 ChatGPT workspace 的 Custom MCP App authentication 要求 OAuth，請在 MCP server 前加 OAuth-capable gateway，或使用 OpenAI 支援的 secure/private MCP tunnel。
+在目前支援所需 custom MCP capability 的 ChatGPT workspace / surface：
 
-只有外層已經有可信 authentication 時，才使用 `MCP_ALLOW_INSECURE_NO_AUTH=true`。
-
-## 3. 建立 ChatGPT Custom MCP App
-
-在支援 custom MCP app 的 ChatGPT workspace：
-
-1. 依 workspace 要求開啟 Developer Mode。
-2. Create custom app。
-3. 填入你部署後的 MCP URL，不是 GitLab API URL。
-4. 設定 deployment 支援的 authentication。
-5. Scan Tools。
-6. Create / enable app。
-7. 開新對話並選擇此 app。
+1. 依需求開啟 Developer Mode。
+2. Create Custom MCP App。
+3. 填入 `https://gitlab-mcp.example.com/mcp`。
+4. Scan / discover tools。
+5. 依提示開始 authentication flow。
+6. 在 GitLab browser consent screen 授權 GitLab account。
+7. 回到 ChatGPT，先用 harmless read operation 驗證。
 
 Smoke test：
 
@@ -71,18 +91,53 @@ Smoke test：
 列出我可以存取的 GitLab groups 和 projects。
 ```
 
-正常情況會使用本 repo MCP Server 提供的 `gitlab_list_groups`、`gitlab_list_projects` 等 tools。
+MCP tools 應該以完成 OAuth 的 GitLab identity 執行，而不是共用 server token。
+
+## Read / write authorization
+
+Deployment 預設 read-only：
+
+```bash
+GITLAB_WRITE_ENABLED=false
+GITLAB_MERGE_ENABLED=false
+```
+
+這時 OAuth flow 只提供 `gitlab:read`。
+
+若要開啟部分 write tools：
+
+```bash
+GITLAB_WRITE_ENABLED=true
+```
+
+User 仍然必須另外授權 `gitlab:write`。Merge 直到下面設定開啟前都維持 disabled：
+
+```bash
+GITLAB_MERGE_ENABLED=true
+```
+
+OAuth scope、server policy、project allowlist 與 GitLab user 本身的 GitLab permission 必須全部允許，action 才能成功。
+
+## ChatGPT 不會取得什麼
+
+Per-user OAuth 模式下，ChatGPT / MCP client 取得的是這台 MCP Server 發出的 MCP access / refresh token。Client 不需要也不應取得 deployment 的 GitLab OAuth application secret、`OAUTH_ENCRYPTION_KEY` 或 raw PAT。
+
+使用者真正的 GitLab OAuth access / refresh token 只保存在 server-side encrypted OAuth store。
+
+## Shared-token fallback
+
+Personal / trusted single-user 環境仍可使用 `MCP_AUTH_MODE=shared-token`。這個模式讓整個 deployment 共用一顆 GitLab token，並可用 `MCP_AUTH_TOKEN` 保護 MCP endpoint。
+
+Untrusted multi-user ChatGPT workspace 不應拿 shared-token mode 取代 per-user authorization。
+
+## 目前 storage 限制
+
+v0.4 built-in OAuth store 是 single-node / file-based。每個 store 只應由一個 writable MCP Server instance 使用。沒有 external locking / transactional backend 前，不要把同一份 OAuth store file 掛到多個 replicas。
 
 ## ChatGPT plan / surface
 
-哪些 plan、workspace role 與 ChatGPT surface 可以建立或使用 full custom MCP app，是 OpenAI 平台能力，可能獨立於本 repo 變動。設定時請確認最新 OpenAI 文件。
-
-## v0.3.0 identity limitation
-
-目前整台 MCP Server 使用一個設定好的 GitLab token，適合 personal deployment 或刻意使用 service identity 的 trusted workspace。
-
-Untrusted multi-user environment 不應把單一 shared server token 當成 per-user authorization。Per-user GitLab OAuth passthrough 會放到後續版本。
+哪些 plan、workspace role 與 ChatGPT surface 可以建立或使用 Custom MCP App、write-capable MCP tools，是 OpenAI 平台能力，可能獨立於本 repo 改變。部署時請確認 OpenAI 最新文件。
 
 ## Plugin packaging
 
-原本的 `scripts/build_chatgpt_variant.py` 仍保留，供需要 workspace-specific plugin/app packaging 的情況使用；v0.3.0 實際 GitLab data path 改由 self-hosted MCP Server 負責。
+`scripts/build_chatgpt_variant.py` 仍保留，供需要 workspace-specific plugin/app packaging 的情境使用；實際 GitLab data 與 OAuth path 都由 self-hosted MCP Server 負責。

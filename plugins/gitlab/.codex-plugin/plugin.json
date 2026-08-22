@@ -1,7 +1,7 @@
 {
   "name": "gitlab",
-  "version": "0.3.0",
-  "description": "Inspect and operate GitLab projects through the bundled self-hosted MCP server, with safe Codex and ChatGPT integration workflows.",
+  "version": "0.4.0",
+  "description": "Inspect and operate GitLab projects through the bundled self-hosted MCP server with safe shared-token or per-user OAuth workflows for Codex and ChatGPT.",
   "author": {
     "name": "AdemKao",
     "url": "https://github.com/AdemKao"
@@ -18,14 +18,15 @@
     "ci",
     "pipelines",
     "mcp",
+    "oauth",
     "chatgpt"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "GitLab",
-    "shortDescription": "Self-hosted GitLab MCP for ChatGPT and Codex",
-    "longDescription": "Use the bundled self-hosted GitLab MCP server to inspect projects, review merge requests, manage issues, debug pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed, with local git/glab fallbacks where needed.",
+    "shortDescription": "Self-hosted GitLab MCP with per-user OAuth",
+    "longDescription": "Use the bundled self-hosted GitLab MCP server to inspect projects, review merge requests, manage issues, debug pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed. Deploy with a shared service token for trusted single-user use or per-user OAuth so every MCP client receives the permissions of its own GitLab identity.",
     "developerName": "AdemKao",
     "category": "Developer Tools",
     "capabilities": [

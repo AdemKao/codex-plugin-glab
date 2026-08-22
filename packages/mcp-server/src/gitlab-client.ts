@@ -1,3 +1,4 @@
+import { currentGitLabCredential, currentRequestAuth } from "./auth-context.js";
 import type { ServerConfig } from "./config.js";
 
 export interface GitLabPage<T> {
@@ -36,9 +37,10 @@ export class GitLabClient {
   constructor(private readonly config: ServerConfig) {}
 
   private authHeaders(): Record<string, string> {
-    return this.config.gitlabTokenType === "bearer"
-      ? { Authorization: `Bearer ${this.config.gitlabToken}` }
-      : { "PRIVATE-TOKEN": this.config.gitlabToken };
+    const credential = currentGitLabCredential(this.config);
+    return credential.tokenType === "bearer"
+      ? { Authorization: `Bearer ${credential.token}` }
+      : { "PRIVATE-TOKEN": credential.token };
   }
 
   async request<T>(
@@ -51,6 +53,11 @@ export class GitLabClient {
       retry429?: boolean;
     } = {},
   ): Promise<GitLabPage<T>> {
+    const requestAuth = currentRequestAuth();
+    if (requestAuth && method !== "GET" && !requestAuth.scopes.has("gitlab:write")) {
+      throw new GitLabApiError("OAuth scope gitlab:write is required for this operation", 403);
+    }
+
     const url = new URL(`${this.config.gitlabHost}/api/v4${path}`);
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
