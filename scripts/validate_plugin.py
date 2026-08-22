@@ -127,11 +127,12 @@ def validate_docs() -> None:
         if not zh_tw.is_file():
             fail(f"missing Traditional Chinese doc: {zh_tw.relative_to(ROOT)}")
 
+    scaffold_marker = "[" + "TODO:"
     for path in ROOT.rglob("*"):
         if path.is_file() and path.suffix.lower() in {".md", ".json", ".py", ".yml", ".yaml"}:
             text = path.read_text(encoding="utf-8", errors="replace")
-            if "[TODO:" in text:
-                fail(f"leftover scaffold TODO in {path.relative_to(ROOT)}")
+            if scaffold_marker in text:
+                fail(f"leftover scaffold placeholder in {path.relative_to(ROOT)}")
 
 
 def main() -> None:
