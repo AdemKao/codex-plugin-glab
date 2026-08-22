@@ -32,7 +32,7 @@ export interface OAuthTransactionRecord {
   id: string;
   clientId: string;
   redirectUri: string;
-  downstreamState?: string;
+  downstreamState?: string | undefined;
   downstreamCodeChallenge: string;
   scopes: string[];
   gitlabPkceVerifier: string;
