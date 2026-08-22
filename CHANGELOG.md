@@ -2,7 +2,23 @@
 
 All notable changes to this project will be documented here.
 
+The format is inspired by Keep a Changelog, and plugin versions follow semantic versioning while the project remains in early preview.
+
 ## [Unreleased]
+
+### Added
+
+- `SUPPORT.md` and `SUPPORT.zh-TW.md` for support routing and sanitized bug reports.
+- English and Traditional Chinese documentation indexes under `docs/`.
+- Issue-template configuration with security and documentation contact links.
+
+### Changed
+
+- Reworked README structure around badges, quick start, supported surfaces, architecture, support, and versioning.
+- Expanded contribution guidelines with development setup, branch/commit conventions, validation, documentation sync, and PR expectations.
+- Expanded the security policy with supported-version guidance, private reporting scope, credential handling, prompt-injection boundaries, and disclosure guidance.
+- Structured the Code of Conduct into expectations, scope, enforcement, and reporting sections.
+- Extended CI validation to cover core community-health files and bilingual support/documentation index pairs.
 
 ### Planned
 
