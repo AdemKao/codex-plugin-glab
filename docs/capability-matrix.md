@@ -2,46 +2,51 @@
 
 [English](capability-matrix.md) | [繁體中文](capability-matrix.zh-TW.md)
 
-This matrix separates what this repository can implement from what the OpenAI and GitLab platforms currently expose.
+## Server capabilities in v0.3.0
 
-> Snapshot date: **2026-08-23**. Re-check platform documentation before relying on this matrix for production decisions.
+| Capability | Bundled MCP server | Notes |
+| --- | --- | --- |
+| Current GitLab user | Read | Token identity |
+| Groups | Read | Lists groups visible to token |
+| Projects | Read | Membership projects; optional allowlist filtering |
+| Branches | Read / create | Create requires writes enabled |
+| Commits | Read | Optional ref filter |
+| Issues | Read / create / update / comment | Writes disabled by default |
+| Merge requests | Read / create / update / comment | Writes disabled by default |
+| MR diffs | Read | Paginated GitLab API |
+| Merge MR | Optional write | Requires both write and merge flags |
+| Pipelines | Read | Project pipeline inspection |
+| Pipeline jobs | Read | Includes job trace/log read |
+| Arbitrary GitLab API proxy | No | Explicit tools only |
+| Local working tree | No | Handled by client/plugin using local `git` |
+| Local commit/push | No | Handled by client/plugin using `git` / `glab` |
+| Per-user GitLab OAuth mapping | Not yet | Planned after v0.3.0 |
 
-| Capability | Codex + source plugin | ChatGPT Web + Custom MCP App | ChatGPT mobile |
-| --- | --- | --- | --- |
-| Install/use GitLab workflow skills | Yes | Yes when distributed as a plugin for the workspace | Platform-dependent |
-| Connect to GitLab official remote MCP | Yes via bundled `.mcp.json` | Yes via Custom MCP App | No custom MCP apps currently |
-| GitLab OAuth | Yes through MCP client flow | Yes through Custom MCP App flow | Not available for custom MCP apps currently |
-| Read projects/repositories | Yes, subject to GitLab MCP/version access | Yes | Not through this custom app path currently |
-| Read issues/MRs | Yes | Yes | Not through this custom app path currently |
-| Create/update issues/MRs | MCP when exposed; `glab` fallback in local Codex workflows | Full MCP write requires an eligible workspace/plan and enabled tools | Not through this custom app path currently |
-| Inspect pipelines/jobs | Yes | Yes when tools are exposed | Not through this custom app path currently |
-| Modify local working tree | Yes, local Codex environment | No remote ChatGPT working tree by default | No |
-| `git add` / local commit | Yes | No, unless another execution environment is explicitly connected | No |
-| `git push` from local checkout | Yes | No local checkout by default; use GitLab MCP write tools where available | No |
-| Bind workspace app into plugin | Optional generated variant | Yes, using a real workspace app/connector ID | Binding may exist, but custom MCP app invocation is currently unsupported on mobile |
+## Client surfaces
 
-## Plan notes
-
-Current OpenAI documentation says:
-
-- Full MCP, including write/modify actions, is rolling out in beta to Business, Enterprise, and Edu.
-- Pro users can use custom MCP apps in Developer Mode with read/fetch limitations rather than full write/modify support.
-- Custom MCP Apps are currently web-only.
-
-These limits belong to ChatGPT, not to GitLab or this repository.
-
-## Backend ownership
-
-| Layer | Owner |
+| Surface | Integration path |
 | --- | --- |
-| GitLab API | GitLab |
-| GitLab official MCP server | GitLab |
-| OAuth handled by the GitLab MCP integration | GitLab / MCP client flow |
-| GitLab workflow skills | `codex-plugin-glab` |
-| Local commit/push fallback | Codex environment + `git` / `glab` |
-| ChatGPT workspace app registration | ChatGPT workspace admin / OpenAI platform |
-| Mobile support for Custom MCP Apps | OpenAI platform |
+| Codex | Plugin + bundled local/remote MCP server; local `git` / `glab` fallback where needed |
+| ChatGPT | Deploy the MCP server remotely over HTTPS, then connect it as a Custom MCP App where the workspace supports it |
+| Other MCP clients | Connect to `/mcp` using supported HTTP/auth configuration |
 
-## Implication
+Client product availability, plan limits, approval UI, and write permissions are controlled by each MCP client and can change independently of this repository.
 
-Hosting a second MCP server does not solve the current ChatGPT mobile limitation. The most maintainable architecture is to use GitLab's official MCP server and keep this repository focused on workflow skills, safe routing, packaging, validation, and app binding.
+## Authentication matrix
+
+| Boundary | v0.3.0 support |
+| --- | --- |
+| MCP endpoint fixed bearer | Yes (`MCP_AUTH_TOKEN`) |
+| MCP endpoint unauthenticated loopback | Yes |
+| MCP endpoint unauthenticated public bind | Explicit opt-in only; not recommended |
+| GitLab `PRIVATE-TOKEN` | Yes |
+| GitLab OAuth-style bearer token | Yes |
+| Per-user OAuth passthrough | Planned |
+
+## GitLab targets
+
+- GitLab.com
+- GitLab Self-Managed
+- GitLab Dedicated
+
+Compatibility depends on the GitLab version and availability of the REST API endpoints used by each tool.
