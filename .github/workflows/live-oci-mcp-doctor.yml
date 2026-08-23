@@ -1,0 +1,22 @@
+name: live-oci-mcp-doctor
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  doctor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run live MCP doctor against OCI
+        run: |
+          python3 scripts/chatgpt_mcp_doctor.py \
+            --mcp-url https://gitlab-mcp.blacmarcs.com/mcp
