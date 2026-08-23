@@ -1,7 +1,7 @@
 {
   "name": "gitlab",
-  "version": "0.4.0",
-  "description": "Inspect and operate GitLab projects through the bundled self-hosted MCP server with safe shared-token or per-user OAuth workflows for Codex and ChatGPT.",
+  "version": "0.5.0",
+  "description": "Inspect and operate GitLab projects through the bundled production-oriented MCP server with safe shared-token or per-user OAuth workflows for Codex and ChatGPT.",
   "author": {
     "name": "AdemKao",
     "url": "https://github.com/AdemKao"
@@ -19,14 +19,15 @@
     "pipelines",
     "mcp",
     "oauth",
+    "cimd",
     "chatgpt"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "GitLab",
-    "shortDescription": "Self-hosted GitLab MCP with per-user OAuth",
-    "longDescription": "Use the bundled self-hosted GitLab MCP server to inspect projects, review merge requests, manage issues, debug pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed. Deploy with a shared service token for trusted single-user use or per-user OAuth so every MCP client receives the permissions of its own GitLab identity.",
+    "shortDescription": "Production GitLab MCP with OAuth and CIMD",
+    "longDescription": "Use the bundled GitLab MCP server to inspect projects, review merge requests, manage issues, operate repository files and pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed. Deploy with a shared service token for trusted single-user use or per-user OAuth with CIMD/DCR support and an optional PostgreSQL store for multi-replica deployments.",
     "developerName": "AdemKao",
     "category": "Developer Tools",
     "capabilities": [
