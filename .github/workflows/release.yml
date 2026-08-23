@@ -53,14 +53,18 @@ jobs:
             capture {print}
           ' CHANGELOG.md > release-notes.md
 
-          if [[ ! -s release-notes.md ]]; then
-            echo "Release notes for $VERSION were not found in CHANGELOG.md" >&2
-            exit 1
-          fi
-
           git tag "$TAG" "$COMMIT_SHA"
           git push origin "$TAG"
-          gh release create "$TAG" \
-            --target "$COMMIT_SHA" \
-            --title "$TAG" \
-            --notes-file release-notes.md
+
+          if [[ -s release-notes.md ]]; then
+            gh release create "$TAG" \
+              --target "$COMMIT_SHA" \
+              --title "$TAG" \
+              --notes-file release-notes.md
+          else
+            echo "No CHANGELOG section for $VERSION; using GitHub-generated release notes."
+            gh release create "$TAG" \
+              --target "$COMMIT_SHA" \
+              --title "$TAG" \
+              --generate-notes
+          fi
