@@ -13,6 +13,29 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 - Observability, audit events, and operational metrics for hosted deployments.
 - Additional GitLab release/member/milestone workflows.
 
+## [0.5.7] - 2026-08-23
+
+### Fixed
+
+- Changed the GitHub marketplace-root `GitLab Self-Hosted` package from a connection-less source package into a directly usable remote MCP package.
+- Added the committed `plugins/gitlab-self-hosted/.mcp.json` binding for `https://gitlab-mcp.blacmarcs.com/mcp` and added `mcpServers: "./.mcp.json"` to the source plugin manifest.
+- Removed the normal-user requirement to run an MCP server locally, build a personal/ChatGPT marketplace variant, maintain a second repository, or copy a ChatGPT MCP connection technical ID before using the root package.
+- Kept localhost support as an explicit development fallback: `build_local_variant.py` now overrides the hosted source binding with `http://127.0.0.1:3333/mcp` instead of constructing a binding from an unbound source package.
+
+### Changed
+
+- Reworked `build_personal_variant.py` as an optional custom-remote override for operators who deliberately want a different public HTTPS MCP endpoint.
+- Reworked `build_chatgpt_variant.py` so the optional App/connection-bound artifact starts from the direct-bound source package, removes the source MCP binding, and then adds its `.app.json` dependency.
+- Added regression validation that locks the repository-root package to `https://gitlab-mcp.blacmarcs.com/mcp`, verifies the localhost override, verifies optional custom-remote/App-bound transformations, and rejects stale endpoint-unbound documentation for the primary install path.
+- Synchronized root/plugin READMEs, Traditional Chinese documentation, ChatGPT/Codex integration docs, and the `gitlab-setup` skill around the same root-install -> remote HTTPS MCP -> OAuth flow.
+- Synchronized `VERSION`, plugin manifest, MCP package, and MCP runtime-reported version at v0.5.7.
+
+### Security
+
+- The default package points only to the fixed public HTTPS `/mcp` endpoint; OAuth/GitLab credentials remain outside the plugin package and are handled by the MCP/OAuth server.
+- Localhost remains opt-in through the generated development variant and is no longer the normal marketplace-root dependency.
+- Optional custom-remote and App-bound helpers continue to validate public HTTPS `/mcp` URLs and reject unsafe local/private/credential-bearing targets.
+
 ## [0.5.6] - 2026-08-23
 
 ### Fixed
