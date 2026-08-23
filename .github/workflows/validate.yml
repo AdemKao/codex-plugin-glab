@@ -38,6 +38,7 @@ jobs:
         run: |
           python3 scripts/validate_plugin.py
           python3 scripts/validate_oauth.py
+          python3 scripts/validate_chatgpt_binding.py
 
       - uses: actions/setup-node@v4
         with:
