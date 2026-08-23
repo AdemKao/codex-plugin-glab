@@ -10,57 +10,82 @@ An open-source GitLab integration for **ChatGPT, Codex, and MCP clients**. The s
 1. the `GitLab Self-Hosted` workflow plugin; and
 2. the GitLab MCP server that can be deployed behind HTTPS with per-user OAuth.
 
-> **Status:** v0.5.8 / early preview.
+> **Status:** v0.5.9 / early preview.
 >
 > **Third-party project:** this repository is not an official GitLab or OpenAI project and is not endorsed by either company.
 
-## Default setup: remote-first and user-configured
+## Recommended ChatGPT setup: registered MCP App
 
-Install the repository marketplace root and use:
+The portable marketplace package is:
 
 ```text
 gitlab-self-hosted@ademkao-codex-plugins
 ```
 
-The public source plugin is intentionally **endpoint-neutral**. It does not contain a maintainer-specific MCP hostname, it does not silently select `localhost`, and it does not publish a private deployment URL.
+The public source plugin intentionally stays **endpoint-neutral**: it contains reusable skills and metadata, but no active workspace-specific `.app.json`, no maintainer-specific MCP hostname, and no automatically selected localhost server.
 
-For the normal remote setup:
+For ChatGPT plugin usage, the recommended setup is:
 
-1. Install the marketplace root from this repository.
-2. In ChatGPT, Codex, or another compatible MCP client, configure the remote HTTPS endpoint that belongs to the user or workspace, for example:
+1. Deploy the MCP server behind a public HTTPS `/mcp` endpoint.
+2. Enable ChatGPT Developer mode and register that MCP endpoint as an App/connection.
+3. Complete OAuth and confirm the connection exposes the expected GitLab tools.
+4. Copy the platform-generated technical ID. It starts with `plugin_asdk_app_`.
+5. Build the App-bound marketplace variant:
 
-   ```text
-   https://gitlab-mcp.example.com/mcp
+   ```bash
+   python3 scripts/build_chatgpt_app.py \
+     --app-id plugin_asdk_app_REPLACE_ME \
+     --mcp-url https://gitlab-mcp.example.com/mcp
    ```
 
-3. Complete the MCP server's OAuth discovery and GitLab authorization flow.
-4. Verify a harmless read such as listing accessible groups or projects before enabling writes.
+6. Import/install the generated marketplace and use:
 
-This path does **not** require running the MCP server on the user's laptop, does not require `build_personal_variant.py`, does not require `build_chatgpt_variant.py`, and does not require a second repository.
+   ```text
+   gitlab-self-hosted@ademkao-gitlab-chatgpt
+   ```
 
-### Why the URL is not `${GITLAB_MCP_URL}`
+The generated plugin contains `.app.json`, and its manifest declares:
 
-Current Agent Plugin HTTP MCP configuration requires an actual absolute HTTP/HTTPS URL. Arbitrary install-time variables are not expanded inside the HTTP `url` field. A committed `.mcp.json` therefore cannot safely be both automatically active and independently editable for every user's private hostname.
+```json
+{
+  "apps": "./.app.json"
+}
+```
 
-For that reason, this repository keeps the public plugin endpoint-neutral and keeps the real remote URL in the user's or workspace's MCP/App configuration. The neutral example is stored at:
+The generated marketplace uses `authentication: ON_INSTALL`, so the registered App connection is treated as part of the plugin installation flow.
+
+See [ChatGPT / Codex App integration](docs/chatgpt-app.md) for the full flow.
+
+### Why the App ID is not committed
+
+Registered ChatGPT MCP App IDs are platform-generated and normally belong to a specific user/workspace connection. A public Git repository cannot safely guess or dynamically inherit an arbitrary user's App ID at install time.
+
+This repository therefore keeps two layers separate:
+
+- **Portable source plugin:** public skills/metadata and no workspace-specific App ID.
+- **Generated App-bound plugin:** `.app.json` plus `apps: "./.app.json"` for one registered `plugin_asdk_app_...` connection.
+
+This avoids shipping a broken placeholder as an active dependency and avoids silently routing every user to a maintainer-controlled MCP deployment.
+
+## Direct remote MCP fallback
+
+Clients that expose custom MCP servers directly can still configure their own remote HTTPS endpoint, for example:
+
+```text
+https://gitlab-mcp.example.com/mcp
+```
+
+This remains useful for development, troubleshooting, and MCP-client testing. The neutral reference lives at:
 
 ```text
 plugins/gitlab-self-hosted/workspace-binding/.mcp.remote.json.example
 ```
 
-Do not commit organization-specific MCP endpoints or OAuth secrets into the public plugin.
-
-## ChatGPT app-binding note
-
-A plugin package and an authenticated MCP App/connection are separate layers. On ChatGPT surfaces that require an explicit app dependency for plugin-backed tools, a static public plugin cannot dynamically guess or inherit an arbitrary user-created MCP connection ID.
-
-The normal endpoint-neutral setup is still the preferred path when the client exposes the user's configured MCP tools directly. For managed workspaces, a platform App Template can represent workspace-specific configuration when such a template is available. This repository does not claim to ship an OpenAI-managed App Template.
-
-The legacy `build_chatgpt_variant.py` helper remains for environments that explicitly require binding the plugin to an already-existing ChatGPT MCP App/connection technical ID, but it is no longer the default installation path.
+Do not commit organization-specific MCP endpoints, App IDs, GitLab tokens, or OAuth secrets into the portable public plugin.
 
 ## Localhost is development fallback only
 
-If you are developing the bundled MCP server on the same machine as Codex, the local fallback remains available:
+If you are developing the bundled MCP server on the same machine as Codex, generate the local variant explicitly:
 
 ```bash
 python3 scripts/build_local_variant.py
@@ -72,7 +97,7 @@ That generated development marketplace binds:
 http://127.0.0.1:3333/mcp
 ```
 
-The repository root marketplace never selects that localhost URL automatically.
+The repository root marketplace never selects localhost automatically.
 
 ## Deploying the bundled MCP server
 
@@ -164,15 +189,16 @@ plugins/gitlab-self-hosted/
   .codex-plugin/plugin.json
   workspace-binding/.mcp.remote.json.example   # neutral remote reference
   workspace-binding/.mcp.local.json.example    # localhost development fallback
-  workspace-binding/.app.json.example          # legacy explicit app-binding helper input
+  workspace-binding/.app.json.example          # App-binding template input
   skills/
 packages/mcp-server/
   src/
   tests/
 scripts/
+  build_chatgpt_app.py         # recommended registered ChatGPT App wrapper
+  build_chatgpt_variant.py     # lower-level existing-App binding helper
+  build_personal_variant.py    # explicit direct remote artifact helper
   build_local_variant.py       # explicit localhost development marketplace
-  build_personal_variant.py    # legacy explicit remote artifact helper
-  build_chatgpt_variant.py     # legacy existing-App binding helper
   chatgpt_mcp_doctor.py
   validate_plugin.py
   validate_oauth.py
@@ -193,11 +219,11 @@ npm install
 npm run check
 ```
 
-CI also builds the production Docker image. `validate_public_config.py` protects the public package from accidentally committing a real maintainer or organization MCP `/mcp` endpoint.
+CI also smoke-tests the registered-App packaging helper and builds the production Docker image. `validate_public_config.py` protects the public package from accidentally committing a real maintainer or organization MCP `/mcp` endpoint.
 
 ## Documentation
 
-- [ChatGPT / Codex remote MCP setup](docs/chatgpt-app.md)
+- [ChatGPT / Codex App integration](docs/chatgpt-app.md)
 - [Architecture](docs/architecture.md)
 - [Authentication](docs/authentication.md)
 - [Self-Managed GitLab](docs/self-managed.md)
@@ -207,7 +233,7 @@ CI also builds the production Docker image. `validate_public_config.py` protects
 
 ## Versioning
 
-`VERSION`, the plugin manifest, the MCP package version, and the runtime-reported version must match. CI validates the release metadata before merge. User-visible changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+`VERSION`, the plugin manifest, the MCP package version, and the runtime-reported version must match. CI validates the release metadata before merge. Release notes are taken from [CHANGELOG.md](CHANGELOG.md) when a matching section exists; otherwise the release workflow falls back to GitHub-generated notes.
 
 ## License
 
