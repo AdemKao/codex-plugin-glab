@@ -16,10 +16,13 @@ MANIFEST = PLUGIN / ".codex-plugin" / "plugin.json"
 MCP = PLUGIN / ".mcp.json"
 APP_TEMPLATE = PLUGIN / "app-template" / ".app.json.example"
 BUILDER = ROOT / "scripts" / "build_chatgpt_variant.py"
+DOCTOR = ROOT / "scripts" / "chatgpt_mcp_doctor.py"
+BINDING_HELPERS = ROOT / "scripts" / "chatgpt_binding.py"
 MARKETPLACE = ROOT / ".agents" / "plugins" / "marketplace.json"
 MCP_PACKAGE = ROOT / "packages" / "mcp-server" / "package.json"
 VERSION_FILE = ROOT / "VERSION"
 APP_PLACEHOLDER = "REPLACE_WITH_GITLAB_APP_OR_CONNECTOR_ID"
+TEST_REMOTE_MCP = "https://gitlab-mcp.example.com/mcp"
 
 REQUIRED_MCP_FILES = [
     ROOT / "packages" / "mcp-server" / "src" / "config.ts",
@@ -115,14 +118,8 @@ def validate_manifest() -> None:
 
     interface = data.get("interface") or {}
     for key in (
-        "displayName",
-        "shortDescription",
-        "longDescription",
-        "developerName",
-        "category",
-        "capabilities",
-        "defaultPrompt",
-        "brandColor",
+        "displayName", "shortDescription", "longDescription", "developerName",
+        "category", "capabilities", "defaultPrompt", "brandColor",
     ):
         if key not in interface or interface[key] in (None, "", []):
             fail(f"interface.{key} is required")
@@ -167,38 +164,53 @@ def validate_app_template() -> None:
     app_id = template.get("apps", {}).get("gitlab", {}).get("id")
     if app_id != APP_PLACEHOLDER:
         fail("app template must contain the documented GitLab app/connector placeholder")
-    if not BUILDER.is_file():
-        fail("missing scripts/build_chatgpt_variant.py")
+    for path in (BUILDER, DOCTOR, BINDING_HELPERS):
+        if not path.is_file():
+            fail(f"missing ChatGPT binding tool: {path.relative_to(ROOT)}")
 
 
 def validate_generated_variant() -> None:
     with tempfile.TemporaryDirectory(prefix="codex-plugin-glab-") as temp_dir:
         output = Path(temp_dir) / "gitlab-chatgpt"
         result = subprocess.run(
-            [
-                sys.executable,
-                str(BUILDER),
-                "--app-id",
-                "test_connector_ci_123",
-                "--output",
-                str(output),
-            ],
-            cwd=ROOT,
-            text=True,
-            capture_output=True,
-            check=False,
+            [sys.executable, str(BUILDER), "--app-id", "test_connector_ci_123",
+             "--mcp-url", TEST_REMOTE_MCP, "--output", str(output)],
+            cwd=ROOT, text=True, capture_output=True, check=False,
         )
         if result.returncode != 0:
             fail(f"ChatGPT variant builder failed: {result.stderr.strip()}")
 
         generated_app = load_json_external(output / ".app.json")
         generated_manifest = load_json_external(output / ".codex-plugin" / "plugin.json")
+        generated_setup = load_json_external(output / ".chatgpt-setup.json")
         if generated_app.get("apps", {}).get("gitlab", {}).get("id") != "test_connector_ci_123":
             fail("generated .app.json does not contain requested app ID")
         if generated_manifest.get("apps") != "./.app.json":
             fail("generated plugin manifest does not bind ./.app.json")
+        if generated_setup.get("mcp_url") != TEST_REMOTE_MCP:
+            fail("generated ChatGPT setup metadata does not contain requested MCP URL")
+        if generated_setup.get("requires_explicit_chatgpt_app_creation") is not True:
+            fail("generated ChatGPT setup must preserve explicit platform consent boundary")
         if (output / "app-template").exists():
             fail("generated plugin should not include the source app-template directory")
+
+    rejected_urls = [
+        "http://gitlab-mcp.example.com/mcp",
+        "https://localhost/mcp",
+        "https://127.0.0.1/mcp",
+        "https://10.0.0.8/mcp",
+        "https://169.254.10.1/mcp",
+        "https://gitlab-mcp.example.com/not-mcp",
+    ]
+    for index, bad_url in enumerate(rejected_urls):
+        with tempfile.TemporaryDirectory(prefix="codex-plugin-glab-reject-") as temp_dir:
+            result = subprocess.run(
+                [sys.executable, str(BUILDER), "--app-id", f"bad_{index}",
+                 "--mcp-url", bad_url, "--output", str(Path(temp_dir) / "out")],
+                cwd=ROOT, text=True, capture_output=True, check=False,
+            )
+            if result.returncode == 0:
+                fail(f"ChatGPT variant builder accepted unsafe MCP URL: {bad_url}")
 
 
 def validate_marketplace() -> None:

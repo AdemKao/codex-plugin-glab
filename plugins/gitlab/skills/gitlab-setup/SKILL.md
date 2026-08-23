@@ -15,11 +15,11 @@ Local Codex default:
 
 `http://127.0.0.1:3333/mcp`
 
-Remote example:
+Remote ChatGPT example:
 
 `https://gitlab-mcp.example.com/mcp`
 
-The server talks to GitLab REST API v4 and supports GitLab.com plus compatible Self-Managed/Dedicated hosts.
+The portable source `.mcp.json` intentionally stays on localhost for Codex. Do not replace it with a maintainer/private deployment URL just to make ChatGPT work.
 
 ## Choose authentication
 
@@ -75,24 +75,7 @@ Use the same `OAUTH_ENCRYPTION_KEY` across replicas and store it separately from
 
 ## MCP OAuth client registration
 
-Prefer CIMD when the client supports it. The authorization metadata advertises `client_id_metadata_document_supported=true` by default.
-
-CIMD safety controls:
-
-```bash
-OAUTH_CIMD_ENABLED=true
-OAUTH_CIMD_ALLOWED_HOSTS=
-OAUTH_CIMD_ALLOW_PRIVATE_NETWORK=false
-OAUTH_CIMD_FETCH_TIMEOUT_MS=5000
-```
-
-For older clients keep DCR enabled:
-
-```bash
-OAUTH_DCR_ENABLED=true
-```
-
-Do not enable private-network CIMD unless the environment intentionally hosts client metadata there; prefer a narrow hostname allowlist.
+Prefer CIMD when the client supports it. For older clients keep DCR enabled. Do not enable private-network CIMD unless the environment intentionally hosts client metadata there; prefer a narrow hostname allowlist.
 
 ## Safety policy
 
@@ -105,13 +88,13 @@ GITLAB_MERGE_ENABLED=false
 
 Use `GITLAB_ALLOWED_PROJECTS` to restrict projects. OAuth write operations additionally require `gitlab:write`. OAuth scope never overrides write/merge flags, allowlists, or GitLab permissions.
 
-## Verify setup
+## Verify server setup
 
-Before declaring setup complete:
+Before declaring the MCP deployment ready:
 
 1. verify `/healthz`;
 2. verify tool discovery;
-3. OAuth mode: verify `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`;
+3. OAuth mode: verify Protected Resource Metadata and Authorization Server Metadata;
 4. unauthenticated `/mcp` must return `401` with OAuth discovery metadata;
 5. verify CIMD metadata support or DCR according to the client;
 6. run a harmless read such as `gitlab_get_current_user`, `gitlab_list_groups`, or `gitlab_list_projects`.
@@ -122,16 +105,37 @@ Do not validate authentication by creating, updating, merging, canceling, or del
 
 For per-user ChatGPT access:
 
-1. deploy the MCP server behind HTTPS;
+1. deploy the bundled MCP server behind public HTTPS;
 2. use `MCP_AUTH_MODE=oauth`;
 3. configure a GitLab OAuth Application;
 4. use PostgreSQL store when deploying multiple MCP replicas;
-5. create the ChatGPT Custom MCP App pointing at `/mcp`;
-6. let the client discover OAuth/CIMD or use DCR fallback;
-7. authorize GitLab in the browser;
-8. test harmless reads before enabling writes.
+5. run the live deployment doctor:
+
+```bash
+python3 scripts/chatgpt_mcp_doctor.py \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+6. in a ChatGPT workspace/surface that supports Custom MCP Apps, explicitly create/connect a Custom MCP App pointing at the same `/mcp` URL and complete the platform user/admin consent flow;
+7. obtain the workspace App/connector ID;
+8. build the workspace-specific plugin variant:
+
+```bash
+python3 scripts/build_chatgpt_variant.py \
+  --app-id <workspace-app-or-connector-id> \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+9. install/use the generated ignored `dist/gitlab-chatgpt/` variant as appropriate for the target workspace;
+10. test harmless reads before enabling writes.
+
+Do not claim that installing the portable plugin silently creates an arbitrary ChatGPT Custom MCP App. App creation and authorization are explicit platform consent boundaries. Do not commit generated workspace App IDs, `.chatgpt-setup.json`, or other `dist/` output.
 
 ChatGPT plan/workspace/surface support is controlled by OpenAI and can change independently of this repository.
+
+## Remote URL safety
+
+The ChatGPT binding builder must reject non-HTTPS, localhost, loopback, private/link-local literal IPs, embedded credentials, query/fragment data, and non-`/mcp` endpoints. The live doctor also resolves DNS and rejects resolved non-public addresses before HTTP requests.
 
 ## Codex / local path
 

@@ -10,7 +10,7 @@
 1. GitLab Plugin：workflow skills、安全 routing 與 local `git` / `glab` fallback；
 2. Self-hosted GitLab MCP Server：直接透過 GitLab REST API 操作 GitLab。
 
-> **狀態：** v0.5.0 / early preview。
+> **狀態：** v0.5.1 / early preview。
 >
 > **第三方專案：** 本 repo 並非 GitLab 或 OpenAI 官方專案，也不代表獲得兩者背書。
 
@@ -101,20 +101,12 @@ PostgreSQL backend 會讓 OAuth state、authorization code 的 consume，以及 
 
 ## MCP OAuth Client Registration
 
-v0.5 同時支援：
+v0.5+ 同時支援：
 
 - **CIMD (Client ID Metadata Documents)**：新版 MCP client 建議路徑。
 - **DCR (Dynamic Client Registration)**：保留作為相容 fallback。
 
 CIMD 以 HTTPS metadata URL 當 `client_id`。Server 會驗證 exact client ID、redirect URI、grant/response type，並預設阻擋 private / loopback / link-local metadata target，降低 SSRF 風險。
-
-```bash
-OAUTH_CIMD_ENABLED=true
-OAUTH_CIMD_ALLOWED_HOSTS=client.example.com
-OAUTH_CIMD_ALLOW_PRIVATE_NETWORK=false
-OAUTH_CIMD_FETCH_TIMEOUT_MS=5000
-OAUTH_DCR_ENABLED=true
-```
 
 ## Docker 快速開始
 
@@ -202,11 +194,55 @@ Repository file delete 與 pipeline cancel 會標示為 destructive MCP tool。
 - CIMD fetch 預設拒絕 redirect 與 private-network target，並有 size/time limit。
 - `OAUTH_ENCRYPTION_KEY` 必須和 OAuth database / volume 分開保管。
 
-## ChatGPT
+## ChatGPT remote binding
 
-要讓不同 ChatGPT 使用者各自使用自己的 GitLab 權限，建議以 `MCP_AUTH_MODE=oauth` 部署成 HTTPS endpoint，再建立指向 `/mcp` 的 Custom MCP App。使用者應透過 OAuth 登入 GitLab，而不是把 PAT 提供給 ChatGPT/MCP client。
+Portable plugin 的 local Codex MCP 設定會刻意保留：
 
-OpenAI plan/workspace availability 可能獨立於本 repo 改變。請看 [docs/chatgpt-app.zh-TW.md](docs/chatgpt-app.zh-TW.md)。
+```text
+http://127.0.0.1:3333/mcp
+```
+
+ChatGPT 無法把這個 loopback endpoint 當 remote workspace App 使用。ChatGPT 必須先把 bundled MCP Server 部署成公開 HTTPS，例如：
+
+```text
+https://gitlab-mcp.example.com/mcp
+```
+
+先檢查 live OAuth deployment：
+
+```bash
+python3 scripts/chatgpt_mcp_doctor.py \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+Doctor 會確認：
+
+- remote URL 使用 HTTPS，而且 DNS 只解析到 public address；
+- Protected Resource Metadata 可取得；
+- Authorization Server Metadata 可取得且 issuer 一致；
+- 未登入 `/mcp` 回 OAuth `401` challenge，並包含 `resource_metadata`。
+
+接著在目前支援 Custom MCP App 的 ChatGPT workspace / surface 中，**明確建立或連接**指向同一個 HTTPS `/mcp` 的 Custom MCP App，完成平台要求的 user/admin consent 與 GitLab OAuth。
+
+本 repo **不宣稱安裝 plugin 後就能靜默自動建立 arbitrary ChatGPT Custom MCP App**。這個 App creation/authorization boundary 仍屬於 ChatGPT 平台的明確使用者/管理員操作。
+
+取得 workspace App / connector ID 後，再建立綁定 variant：
+
+```bash
+python3 scripts/build_chatgpt_variant.py \
+  --app-id YOUR_WORKSPACE_APP_ID \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+預設會產生 ignored `dist/gitlab-chatgpt/`：
+
+- `.app.json`：workspace App binding；
+- patched `plugin.json`：加入 `apps: "./.app.json"`；
+- `.chatgpt-setup.json`：記錄預期 remote MCP URL 與 explicit App-creation boundary。
+
+Source plugin、source `.app.json.example`、localhost `.mcp.json` 都不會被修改。Builder 會拒絕 HTTP、localhost、loopback、link-local/private literal IP、URL 內嵌 credential、query/fragment，以及不是 `/mcp` 的 endpoint。
+
+OpenAI plan、workspace role 與 surface availability 可能獨立於本 repo 改變。請看 [docs/chatgpt-app.zh-TW.md](docs/chatgpt-app.zh-TW.md)，部署時也要確認平台最新要求。
 
 ## Codex Plugin
 
@@ -230,6 +266,9 @@ packages/mcp-server/
   src/register-tools.ts                # core GitLab tools
   src/register-v05-tools.ts            # repository/MR/pipeline tools
   migrations/001_oauth_postgres.sql
+scripts/build_chatgpt_variant.py       # workspace App binding generator
+scripts/chatgpt_binding.py             # remote URL validation
+scripts/chatgpt_mcp_doctor.py          # live OAuth/MCP deployment doctor
 Dockerfile
 docker-compose.yml
 .env.example
@@ -247,7 +286,7 @@ npm install
 npm run check
 ```
 
-CI 另外會啟動 PostgreSQL 17，執行 multi-replica OAuth integration test，再做 TypeScript strict build 與 production Docker build。
+CI 會實際 build fake ChatGPT remote variant、驗證 unsafe remote URL rejection，另外啟動 PostgreSQL 17 執行 multi-replica OAuth integration test，再做 TypeScript strict build 與 production Docker build。
 
 ## 文件
 

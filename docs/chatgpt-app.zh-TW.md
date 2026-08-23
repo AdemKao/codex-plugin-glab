@@ -4,27 +4,21 @@
 
 多人 ChatGPT 使用時，建議部署 bundled MCP Server 的 **per-user OAuth mode**。每個使用者授權自己的 GitLab identity；ChatGPT 取得的是 MCP credential，不是 GitLab PAT。
 
+Portable source plugin 會刻意保留 `plugins/gitlab/.mcp.json` 指向 `http://127.0.0.1:3333/mcp`，供 local Codex 使用。ChatGPT Custom MCP App 則必須指向公開 HTTPS `/mcp` endpoint。
+
 ## Flow
 
 ```text
-ChatGPT Custom MCP App
-        |
-        | HTTPS / MCP + OAuth discovery
-        | 支援時使用 CIMD，否則 DCR fallback
-        v
-https://gitlab-mcp.example.com/mcp
-        |
-        | built-in OAuth gateway
-        v
-GitLab OAuth
-        |
-        | per-user GitLab token
-        v
-GitLab REST API v4
+Local Codex
+  -> source plugin
+  -> http://127.0.0.1:3333/mcp
 
-OAuth sessions
-  單一 replica -> encrypted file
-  多 replicas  -> PostgreSQL
+ChatGPT
+  -> 明確建立 / 連接 Custom MCP App 與 consent
+  -> https://gitlab-mcp.example.com/mcp
+  -> OAuth discovery（支援時 CIMD，否則 DCR fallback）
+  -> GitLab OAuth
+  -> GitLab REST API v4
 ```
 
 ## 1. 建立 GitLab OAuth Application
@@ -35,7 +29,7 @@ OAuth sessions
 https://gitlab-mcp.example.com/oauth/gitlab/callback
 ```
 
-Application ID/secret 與 `OAUTH_ENCRYPTION_KEY` 放在 deployment secret manager，不要放進 plugin 或 prompt。
+Application ID/secret 與 `OAUTH_ENCRYPTION_KEY` 放 deployment secret manager，不要放進 plugin 或 prompt。
 
 ## 2. 部署 OAuth mode
 
@@ -66,37 +60,31 @@ OAUTH_STORE_DRIVER=postgres
 OAUTH_DATABASE_URL=postgresql://user:password@db:5432/codex_glab
 ```
 
-PostgreSQL backend 會保證跨 replica 的 OAuth state / authorization code single-use，以及 refresh-token atomic rotation。
+## 3. 執行 ChatGPT MCP doctor
 
-## 3. 先驗證 OAuth discovery
+建立 workspace App 前，先驗證部署好的 endpoint：
 
-檢查：
-
-```text
-GET https://gitlab-mcp.example.com/.well-known/oauth-protected-resource
-GET https://gitlab-mcp.example.com/.well-known/oauth-authorization-server
+```bash
+python3 scripts/chatgpt_mcp_doctor.py \
+  --mcp-url https://gitlab-mcp.example.com/mcp
 ```
 
-CIMD 開啟時 authorization metadata 應包含：
+Doctor 會驗證 public HTTPS URL、DNS 解析只指向 public address、Protected Resource Metadata、Authorization Server Metadata、issuer 一致性，以及未登入 `/mcp` 是否回 `401` 並帶有 `WWW-Authenticate: ... resource_metadata=...`。
 
-```json
-"client_id_metadata_document_supported": true
-```
+Doctor 失敗時不要繼續，也不要為了讓它通過而把 localhost/private endpoint 暴露成不安全設定。
 
-`OAUTH_DCR_ENABLED=true` 時仍會提供 `/oauth/register` 作 compatibility fallback。
-
-未登入呼叫 `/mcp` 必須回 `401`，並由 `WWW-Authenticate` 指向 Protected Resource Metadata。
-
-## 4. 連接 ChatGPT
+## 4. 明確建立 / 連接 ChatGPT Custom MCP App
 
 在目前支援 Custom MCP App 的 ChatGPT workspace / surface：
 
 1. 需要時開啟 Developer Mode；
-2. 建立 Custom MCP App；
-3. 填 `https://gitlab-mcp.example.com/mcp`；
-4. 讓 client discover tools / OAuth；
+2. 明確建立 Custom MCP App；
+3. 填入 `https://gitlab-mcp.example.com/mcp`；
+4. 讓 ChatGPT discover tools / OAuth；
 5. 在 GitLab browser 完成 authorization；
 6. 先驗證 harmless read。
+
+本 repo **不宣稱安裝 plugin 就能靜默自動建立 arbitrary workspace Custom MCP App**。App creation 與 authorization 仍是 ChatGPT user / workspace admin 必須明確完成的 consent boundary。
 
 Smoke test：
 
@@ -106,9 +94,46 @@ Smoke test：
 
 結果必須反映真正完成 OAuth 的 GitLab account。
 
+## 5. 建立 workspace-bound plugin variant
+
+取得 workspace App / connector ID 後，不需要手動改 source：
+
+```bash
+python3 scripts/build_chatgpt_variant.py \
+  --app-id YOUR_WORKSPACE_APP_ID \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+預設輸出：
+
+```text
+dist/gitlab-chatgpt/
+  .app.json
+  .chatgpt-setup.json
+  .codex-plugin/plugin.json
+  ...
+```
+
+Generated `.app.json` 會依照 `plugins/gitlab/app-template/.app.json.example` 的 source semantics 產生；copy 出來的 `plugin.json` 會加入 `apps: "./.app.json"`。`.chatgpt-setup.json` 會記錄預期 remote MCP URL，並明確保留 workspace App 必須由使用者/管理員建立的界線。
+
+Source plugin、source template、local `.mcp.json` 都不會被修改。`dist/` 已忽略，workspace-specific ID 不應 commit。
+
+## Remote URL safety
+
+ChatGPT variant builder 會拒絕：
+
+- 非 HTTPS URL；
+- localhost / `.localhost`；
+- loopback、private、link-local、multicast、reserved、unspecified literal IP；
+- URL 內嵌 username/password；
+- query string / fragment；
+- 不是 `/mcp` 的 endpoint。
+
+Live doctor 還會額外做 DNS resolve，在任何 HTTP request 前拒絕解析到 non-public address 的 hostname。
+
 ## CIMD / DCR
 
-v0.5 對支援 URL client metadata 的 MCP client 優先使用 CIMD。Server 會驗證 metadata 並預設阻擋 private-network SSRF target。舊 client 仍可透過 DCR 相容。
+v0.5+ 對支援 URL client metadata 的 MCP client 優先使用 CIMD。Server 會驗證 metadata 並預設阻擋 private-network SSRF target。舊 client 仍可透過 DCR 相容。
 
 ## Read / write
 

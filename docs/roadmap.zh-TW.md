@@ -45,6 +45,19 @@
 - pipeline create/retry/cancel tools；
 - Docker Compose PostgreSQL profile 與 migration 文件。
 
+## v0.5.1 — ChatGPT remote App binding UX
+
+已完成：
+
+- Issue #8 的 first-class remote ChatGPT binding generator；
+- workspace binding 必須提供 `--app-id` + `--mcp-url`；
+- public HTTPS `/mcp` URL validation 與 unsafe target rejection；
+- live ChatGPT MCP doctor，驗證 Protected Resource Metadata、Authorization Server Metadata 與未登入 `/mcp` OAuth challenge；
+- 產生 `.app.json` 與 `.chatgpt-setup.json`，不修改 portable source plugin；
+- 保留 local Codex 使用的 localhost `.mcp.json`；
+- CI 建立 fake ChatGPT-bound variant 並驗證 unsafe URL rejection；
+- 文件明確說明 ChatGPT Custom MCP App creation / consent boundary。
+
 ## v0.6 — Policy、observability、compatibility
 
 候選項目：
