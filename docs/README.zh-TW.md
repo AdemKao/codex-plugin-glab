@@ -2,20 +2,20 @@
 
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
-這裡是 `codex-plugin-glab` v0.3.0 的文件入口。專案現在同時包含 ChatGPT/Codex Plugin 與 bundled self-hosted GitLab MCP Server。
+這裡是 `codex-plugin-glab` v0.5.2 的文件入口。專案同時包含 ChatGPT/Codex Plugin 與 bundled self-hosted GitLab MCP Server。
 
 ## 開始使用
 
-- [主要 README](../README.zh-TW.md) — 專案總覽、Docker 快速開始、安全預設與 Plugin 安裝方式。
-- [Authentication](authentication.zh-TW.md) — MCP endpoint authentication 與 server-to-GitLab token handling。
-- [ChatGPT App Integration](chatgpt-app.zh-TW.md) — 將 bundled MCP Server 部署成 remote HTTPS endpoint 並連到 ChatGPT。
+- [主要 README](../README.zh-TW.md) — 專案總覽、Docker 快速開始、personal/Codex direct remote MCP 安裝、localhost fallback 與安全預設。
+- [Authentication](authentication.zh-TW.md) — MCP endpoint authentication、OAuth discovery 與 server-to-GitLab credential handling。
+- [ChatGPT / Codex Remote MCP Integration](chatgpt-app.zh-TW.md) — **Add server -> Streamable HTTP -> HTTPS `/mcp` -> OAuth** 主流程、local fallback、optional workspace binding helper，以及獨立的 managed-workspace App Template 說明。
 - [Capability Matrix](capability-matrix.zh-TW.md) — 目前 server tools、authentication modes 與 client integration paths。
 
 ## 架構與操作
 
 - [Architecture](architecture.zh-TW.md) — Plugin/Server 分工、trust boundaries、policies 與 local `git` / `glab` routing。
 - [Self-Managed GitLab](self-managed.zh-TW.md) — custom GitLab host、TLS、project scoping 與 compatibility。
-- [Roadmap](roadmap.zh-TW.md) — v0.3 已完成基礎，以及後續 per-user OAuth / deeper GitLab workflows。
+- [Roadmap](roadmap.zh-TW.md) — 已完成至 v0.5.2 的 self-hosted MCP/OAuth milestones，以及後續 policy / observability 規劃。
 
 ## MCP Server package
 
