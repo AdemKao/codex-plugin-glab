@@ -57,11 +57,14 @@ def validate_remote_mcp_url(value: str, *, resolve_dns: bool = False) -> str:
     if hostname == "localhost" or hostname.endswith(".localhost"):
         raise BindingValidationError("localhost cannot be used as a ChatGPT remote MCP host")
 
+    # Detect literal IPs without catching our own BindingValidationError. A DNS
+    # hostname is resolved only in doctor mode so build output remains deterministic.
     try:
-        _reject_ip(hostname)
+        ipaddress.ip_address(hostname)
     except ValueError:
-        # A hostname is checked by DNS in doctor mode.
         pass
+    else:
+        _reject_ip(hostname)
 
     if resolve_dns:
         try:
