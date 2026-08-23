@@ -1,6 +1,6 @@
 {
   "apps": {
-    "gitlab": {
+    "gitlab-self-hosted": {
       "id": "REPLACE_WITH_GITLAB_APP_OR_CONNECTOR_ID"
     }
   }

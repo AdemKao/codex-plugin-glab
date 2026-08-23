@@ -4,15 +4,39 @@
 
 Self-hosted GitLab 整合應先把 bundled MCP Server 部署在 HTTPS 後方。使用 per-user OAuth mode 時，每個使用者授權自己的 GitLab identity；MCP client 取得 MCP credential，而不是 GitLab PAT。
 
+## Package identity migration
+
+從 v0.5.4 開始，本 repo 的第三方 plugin identifier 是：
+
+```text
+gitlab-self-hosted
+```
+
+舊的 generic `gitlab` identifier 可能在平台解析時命中 OpenAI curated GitLab plugin。因此本 repo 的 marketplace entry、plugin folder 與 `.codex-plugin/plugin.json` name 都改成 `gitlab-self-hosted`。
+
+Portable/local reference：
+
+```text
+gitlab-self-hosted@ademkao-codex-plugins
+```
+
+Generated ChatGPT App-bound reference：
+
+```text
+gitlab-self-hosted@ademkao-gitlab-chatgpt
+```
+
+v0.5.4 之後，不要再用 `gitlab@ademkao-codex-plugins` 代表本 repo。
+
 ## 最重要的差異
 
-這裡其實有三個不能混在一起的部分：
+這裡有三個不能混在一起的部分：
 
-1. **Codex / native MCP server 設定** — 直接新增 `https://gitlab-mcp.example.com/mcp`，會讓 remote MCP server 本身可以被 MCP client 使用。
-2. **Portable repo marketplace** — `ademkao-codex-plugins` 安裝的是 `plugins/gitlab`，其中 packaged `.mcp.json` 刻意指向 `http://127.0.0.1:3333/mcp`，作為同機 Codex fallback。
-3. **ChatGPT `@GitLab` App binding** — plugin 必須明確依賴擁有該 remote MCP connection 的 ChatGPT App / connector。
+1. **Codex / native MCP server 設定** — 直接新增 `https://gitlab-mcp.example.com/mcp`，會讓 remote MCP server 本身可被 MCP client 使用。
+2. **Portable repo marketplace** — `ademkao-codex-plugins` 安裝 `plugins/gitlab-self-hosted`，其中 packaged `.mcp.json` 刻意指向 `http://127.0.0.1:3333/mcp` 作為同機 Codex fallback。
+3. **ChatGPT App binding** — generated self-hosted plugin 必須明確依賴擁有 remote MCP connection 的 ChatGPT App / connector。
 
-因此，你在 MCP settings 裡另外新增並完成 OAuth 的 remote MCP server，**不會自動取代** portable source plugin packaged 的 localhost MCP dependency。OAuth 可以成功，但 `@GitLab` conversation 仍然可能沒有 GitLab tools。
+因此，你在 MCP settings 裡另外新增並完成 OAuth 的 remote MCP server，**不會自動取代** portable source plugin packaged 的 localhost MCP dependency。OAuth 可以成功，但已安裝的 plugin 仍可能沒有 remote GitLab tools。
 
 ## 我應該使用哪一條設定路徑？
 
@@ -30,13 +54,11 @@ Codex / native MCP client
 
 這條 direct MCP 路徑**不需要** `.app.json` 或 `scripts/build_chatgpt_variant.py`。
 
-### ChatGPT `@GitLab`：generated App-bound marketplace
-
-當你要透過 GitLab plugin mention 與 skills 使用 remote MCP tools 時走這條：
+### ChatGPT：generated App-bound marketplace
 
 ```text
 ChatGPT plugin
-  -> generated marketplace
+  -> gitlab-self-hosted@ademkao-gitlab-chatgpt
   -> .app.json binding
   -> existing ChatGPT App / connector
   -> https://gitlab-mcp.example.com/mcp
@@ -51,7 +73,7 @@ App / connector 必須已經存在並指向 remote MCP endpoint。Generated Chat
 Portable source plugin 刻意保留：
 
 ```text
-plugins/gitlab/.mcp.json
+plugins/gitlab-self-hosted/.mcp.json
   -> http://127.0.0.1:3333/mcp
 ```
 
@@ -126,7 +148,7 @@ Smoke test：
 
 結果應反映真正完成 OAuth 的 GitLab account。
 
-## 5. 把 remote server 綁定到 ChatGPT 的 `@GitLab`
+## 5. 把 remote server 綁定到 self-hosted ChatGPT plugin
 
 單獨新增 remote MCP server 不足以取代 source plugin packaged 的 dependency。
 
@@ -143,7 +165,8 @@ python3 scripts/build_chatgpt_variant.py \
 ```text
 dist/gitlab-chatgpt-marketplace/
   .agents/plugins/marketplace.json
-  plugins/gitlab/
+  README.md
+  plugins/gitlab-self-hosted/
     .app.json
     .chatgpt-setup.json
     .codex-plugin/plugin.json
@@ -153,63 +176,57 @@ dist/gitlab-chatgpt-marketplace/
 Generated marketplace 名稱是 `ademkao-gitlab-chatgpt`，plugin reference：
 
 ```text
-gitlab@ademkao-gitlab-chatgpt
+gitlab-self-hosted@ademkao-gitlab-chatgpt
 ```
 
 Generated plugin 與 portable source plugin 的差異：
 
-- `.codex-plugin/plugin.json` 有 `apps: "./.app.json"`；
+- `.codex-plugin/plugin.json` 有 `name: "gitlab-self-hosted"` 與 `apps: "./.app.json"`；
 - `.codex-plugin/plugin.json` **沒有** `mcpServers`；
-- generated artifact 裡**沒有** `plugins/gitlab/.mcp.json`；
-- `.chatgpt-setup.json` 記錄 `artifact_type: "chatgpt-marketplace"`、`binding_mode: "app"`、generated marketplace/plugin reference，以及 `source_local_mcp_removed: true`。
+- generated artifact 裡**沒有** `plugins/gitlab-self-hosted/.mcp.json`；
+- `.app.json` 使用 namespaced `gitlab-self-hosted` binding key；
+- `.chatgpt-setup.json` 記錄 namespaced plugin ID/reference 與 explicit import/install boundary。
 
-當你要讓 `@GitLab` 使用 remote App 時，應 import/install **generated marketplace root**。不要用 repo root 的 `ademkao-codex-plugins` marketplace 做這個用途，因為 root marketplace 刻意選 portable localhost-oriented source plugin。
+當你要讓 self-hosted plugin 使用 remote App 時，應 import/install **generated marketplace root**。只執行 builder 產生目錄並不會修改已安裝的 plugin。
 
-Generated output 是 workspace-specific 且預設被 git ignore；不要把真實 workspace App / connector binding commit 到 public repo。
+Generated output 是 workspace-specific 且預設被 git ignore；不要把真實 workspace App / connector binding commit 到 public repo，除非它的 portability 已被明確確認。
 
-## 6. Troubleshooting：OAuth 成功但 `@GitLab` 沒有 tools
+## 6. Troubleshooting：OAuth 成功但沒有 GitLab tools
 
-如果以下都成立：
+先檢查 **package resolution**，再檢查 App binding。
 
-- remote MCP server 在 MCP settings 中可見；
-- OAuth 已成功；
-- GitLab plugin 與 skills 已安裝；
-- conversation 仍無法呼叫 GitLab tools；
-
-請先檢查**目前安裝的 marketplace / plugin binding**，不要先改 OAuth。
-
-常見 broken state：
+Deprecated / collision-prone state：
 
 ```text
-Installed: gitlab@ademkao-codex-plugins
-  -> packaged mcpServers
-  -> http://127.0.0.1:3333/mcp
-
-Separate MCP entry
-  -> https://gitlab-mcp.example.com/mcp
-  -> OAuth succeeds
+Reference: gitlab@ademkao-codex-plugins
+  -> generic `gitlab` id
+  -> 可能解析到 OpenAI curated GitLab，而不是本 repo
 ```
 
-這兩個是不同 binding。可用的 remote MCP entry 不會自動覆蓋 plugin 的 localhost dependency。
-
-Remote ChatGPT 正確狀態應該是：
+Portable self-hosted state：
 
 ```text
-Installed: gitlab@ademkao-gitlab-chatgpt
+Installed: gitlab-self-hosted@ademkao-codex-plugins
+  -> packaged localhost MCP fallback
+  -> http://127.0.0.1:3333/mcp
+```
+
+Remote ChatGPT 正確狀態：
+
+```text
+Installed: gitlab-self-hosted@ademkao-gitlab-chatgpt
   -> apps: ./.app.json
   -> existing connected App / connector
   -> https://gitlab-mcp.example.com/mcp
 ```
 
-如果 generated ChatGPT plugin 還有 `mcpServers` 或 `.mcp.json`，請用目前 helper 重新 build。如果 ChatGPT 仍然使用 `gitlab@ademkao-codex-plugins`，應切換/import generated marketplace，而不是一直重跑 separate MCP entry 的 OAuth。
+如果 separate MCP entry 的 OAuth 正常，但 conversation 還是無法呼叫 GitLab tools，先確認 installed plugin 是 `gitlab-self-hosted`，不是 generic `gitlab`；再確認 generated App-bound marketplace 已經真的被 import/install。一直重跑 OAuth 無法修正 package identity mismatch。
 
 ## 7. Managed workspace App Templates
 
 OpenAI managed workspace **App Template** 是獨立的平台管理功能，主要給 workspace 管理者使用。Managed template 可以提供 guided configuration、建立 workspace draft app，再讓 workspace admin review、publish，並管理 access/actions。
 
 本 repo **目前沒有提供，也不宣稱自己是 OpenAI managed App Template**。Repository 的 `.app.json.example` 與 `build_chatgpt_variant.py` 只是 workspace binding helper。
-
-如果未來 target workspace 有 OpenAI-managed GitLab App Template，請走該 workspace 的 Apps / administration 流程。
 
 ## Remote URL safety
 

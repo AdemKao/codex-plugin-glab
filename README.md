@@ -7,12 +7,30 @@
 
 An open-source GitLab integration for **ChatGPT, Codex, and MCP clients**. The repository ships two first-class parts:
 
-1. a GitLab plugin with workflow skills and safe routing; and
+1. a GitLab Self-Hosted plugin with workflow skills and safe routing; and
 2. a self-hosted GitLab MCP server backed by the GitLab REST API.
 
-> **Status:** v0.5.3 / early preview.
+> **Status:** v0.5.4 / early preview.
 >
 > **Third-party project:** this repository is not an official GitLab or OpenAI project and is not endorsed by either company.
+
+## Package identity
+
+Starting with v0.5.4, this repository uses the distinct plugin identifier `gitlab-self-hosted` rather than the generic `gitlab` identifier. The generic identifier can resolve to OpenAI's curated GitLab plugin, so this third-party package now keeps its marketplace entry, folder name, and `plugin.json.name` aligned under a unique ID.
+
+Portable/local reference:
+
+```text
+gitlab-self-hosted@ademkao-codex-plugins
+```
+
+Generated ChatGPT App-bound reference:
+
+```text
+gitlab-self-hosted@ademkao-gitlab-chatgpt
+```
+
+The old `gitlab@ademkao-codex-plugins` reference is deprecated for this repository after v0.5.4.
 
 ## Why self-host
 
@@ -159,18 +177,18 @@ In OAuth mode, an unauthenticated `/mcp` request returns `401` with `WWW-Authent
 The portable source plugin intentionally keeps:
 
 ```text
-plugins/gitlab/.mcp.json -> http://127.0.0.1:3333/mcp
+plugins/gitlab-self-hosted/.mcp.json -> http://127.0.0.1:3333/mcp
 ```
 
 This is a **local fallback** for running the bundled server on the same Codex host. Do not replace the source file with a maintainer-specific public URL just to make remote OAuth work.
 
-The repository root marketplace (`ademkao-codex-plugins`) points to this portable source plugin. Installing that root marketplace therefore does **not** turn a separately-added remote MCP connection into the `@GitLab` plugin's tool binding.
+The repository root marketplace (`ademkao-codex-plugins`) points to this portable source plugin. Installing that root marketplace therefore does **not** turn a separately-added remote MCP connection into the plugin's tool binding.
 
 Local working-tree state, commits, and pushes remain local `git` / `glab` operations.
 
 ## ChatGPT App-bound marketplace helper
 
-`plugins/gitlab/workspace-binding/.app.json.example` and `scripts/build_chatgpt_variant.py` are repository helpers for one narrow case: you already have a ChatGPT workspace App/connector ID for your remote MCP server and want an installable plugin marketplace that binds to that App.
+`plugins/gitlab-self-hosted/workspace-binding/.app.json.example` and `scripts/build_chatgpt_variant.py` are repository helpers for one narrow case: you already have a ChatGPT workspace App/connector ID for your remote MCP server and want an installable plugin marketplace that binds to that App.
 
 They are **not an OpenAI native App Template**, are not required for personal/Codex direct MCP setup, and do not create or publish a ChatGPT App.
 
@@ -187,7 +205,7 @@ Default output:
 ```text
 dist/gitlab-chatgpt-marketplace/
   .agents/plugins/marketplace.json
-  plugins/gitlab/
+  plugins/gitlab-self-hosted/
     .app.json
     .chatgpt-setup.json
     .codex-plugin/plugin.json
@@ -197,12 +215,12 @@ dist/gitlab-chatgpt-marketplace/
 The generated marketplace is named `ademkao-gitlab-chatgpt`, so its plugin reference is:
 
 ```text
-gitlab@ademkao-gitlab-chatgpt
+gitlab-self-hosted@ademkao-gitlab-chatgpt
 ```
 
 The generated ChatGPT plugin deliberately contains `apps: "./.app.json"`, contains **no** `mcpServers` entry, and contains **no** `.mcp.json`. This prevents the portable localhost fallback from competing with the connected App binding.
 
-When you want `@GitLab` to use the remote App, import/install the **generated marketplace root**, not the repository's root `ademkao-codex-plugins` marketplace. The source plugin and source localhost `.mcp.json` remain unchanged.
+When you want the self-hosted plugin to use the remote App, import/install the **generated marketplace root**, not the repository's root portable marketplace. The source plugin and source localhost `.mcp.json` remain unchanged.
 
 Generated output is workspace-specific and ignored by git. Do not commit it to this public repository unless you intentionally understand the workspace-binding implications.
 
@@ -212,7 +230,7 @@ OpenAI managed workspace **App Templates** are a separate platform feature for w
 
 This repository does **not** currently ship or claim to be an OpenAI managed App Template. If a future GitLab template is provided through the OpenAI platform/plugin directory, follow that managed workspace flow independently from this repository's optional binding helper.
 
-See [docs/chatgpt-app.md](docs/chatgpt-app.md) for the full separation between direct remote MCP setup, local fallback, generated App-bound marketplace installation, and managed workspace administration.
+See [docs/chatgpt-app.md](docs/chatgpt-app.md) for the full separation between direct remote MCP setup, local fallback, generated App-bound marketplace installation, package migration, and managed workspace administration.
 
 ## OAuth endpoints
 
@@ -280,7 +298,7 @@ Destructive operations such as repository-file deletion and pipeline cancellatio
 ## Repository layout
 
 ```text
-plugins/gitlab/
+plugins/gitlab-self-hosted/
   .mcp.json                              # localhost fallback
   workspace-binding/.app.json.example   # optional existing-app binding helper input
 packages/mcp-server/
@@ -310,7 +328,7 @@ npm install
 npm run check
 ```
 
-CI validates repository structure and the generated ChatGPT marketplace artifact, asserts that its App-bound plugin cannot retain the source localhost MCP dependency, rejects unsafe remote URLs, starts PostgreSQL 17 for multi-replica OAuth integration tests, runs the TypeScript test/build gate, and builds the production Docker image.
+CI validates repository structure and package identity, the generated ChatGPT marketplace artifact, the absence of the collision-prone generic `gitlab` package, App-binding invariants, unsafe remote URLs, PostgreSQL multi-replica OAuth integration tests, the TypeScript test/build gate, and the production Docker image.
 
 ## Documentation
 

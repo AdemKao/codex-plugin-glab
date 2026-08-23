@@ -4,21 +4,43 @@
 
 For self-hosted GitLab access, deploy the bundled MCP server behind HTTPS. In per-user OAuth mode, each user authorizes their own GitLab identity; the MCP client receives MCP credentials rather than a GitLab PAT.
 
+## Package identity migration
+
+Starting with v0.5.4, this repository's third-party plugin identifier is:
+
+```text
+gitlab-self-hosted
+```
+
+The old generic `gitlab` identifier can resolve to OpenAI's curated GitLab plugin. For this repository, the marketplace entry, plugin folder, and `.codex-plugin/plugin.json` name therefore all use `gitlab-self-hosted`.
+
+Portable/local reference:
+
+```text
+gitlab-self-hosted@ademkao-codex-plugins
+```
+
+Generated ChatGPT App-bound reference:
+
+```text
+gitlab-self-hosted@ademkao-gitlab-chatgpt
+```
+
+Do not use `gitlab@ademkao-codex-plugins` as the identifier for this repository after v0.5.4.
+
 ## The important distinction
 
 There are three different pieces that must not be conflated:
 
 1. **Codex / native MCP server configuration** — adding `https://gitlab-mcp.example.com/mcp` directly makes that remote MCP server available to the MCP client.
-2. **Portable repository marketplace** — `ademkao-codex-plugins` installs `plugins/gitlab`, whose packaged `.mcp.json` intentionally targets `http://127.0.0.1:3333/mcp` as a same-host Codex fallback.
-3. **ChatGPT `@GitLab` App binding** — the plugin must explicitly depend on the connected ChatGPT App/connector that owns the remote MCP connection.
+2. **Portable repository marketplace** — `ademkao-codex-plugins` installs `plugins/gitlab-self-hosted`, whose packaged `.mcp.json` intentionally targets `http://127.0.0.1:3333/mcp` as a same-host Codex fallback.
+3. **ChatGPT App binding** — the generated self-hosted plugin must explicitly depend on the connected ChatGPT App/connector that owns the remote MCP connection.
 
-A remote MCP server that is added and authenticated separately does **not** automatically replace the portable source plugin's packaged localhost MCP dependency. OAuth can therefore succeed while `@GitLab` still exposes no GitLab tools.
+A remote MCP server that is added and authenticated separately does **not** automatically replace the portable source plugin's packaged localhost MCP dependency. OAuth can therefore succeed while the installed plugin still exposes no remote GitLab tools.
 
 ## Which setup path should I use?
 
 ### Codex / native MCP: direct remote server
-
-Use this when the remote MCP server itself is the capability you want to invoke:
 
 ```text
 Codex / native MCP client
@@ -32,13 +54,11 @@ Codex / native MCP client
 
 This direct MCP path does **not** require `.app.json` or `scripts/build_chatgpt_variant.py`.
 
-### ChatGPT `@GitLab`: generated App-bound marketplace
-
-Use this when you want the GitLab plugin mention and skills to expose tools from the remote MCP deployment:
+### ChatGPT: generated App-bound marketplace
 
 ```text
 ChatGPT plugin
-  -> generated marketplace
+  -> gitlab-self-hosted@ademkao-gitlab-chatgpt
   -> .app.json binding
   -> existing ChatGPT App / connector
   -> https://gitlab-mcp.example.com/mcp
@@ -53,7 +73,7 @@ The App/connector must already exist and point to the remote MCP endpoint. The g
 The portable source plugin intentionally keeps:
 
 ```text
-plugins/gitlab/.mcp.json
+plugins/gitlab-self-hosted/.mcp.json
   -> http://127.0.0.1:3333/mcp
 ```
 
@@ -100,8 +120,6 @@ OAUTH_DATABASE_URL=postgresql://user:password@db:5432/codex_glab
 
 ## 3. Validate the remote endpoint
 
-Before connecting a client, validate the deployment:
-
 ```bash
 python3 scripts/chatgpt_mcp_doctor.py \
   --mcp-url https://gitlab-mcp.example.com/mcp
@@ -130,7 +148,7 @@ List the GitLab groups and projects I can access.
 
 The result should reflect the GitLab account that completed OAuth.
 
-## 5. Bind the remote server to `@GitLab` in ChatGPT
+## 5. Bind the remote server to the self-hosted ChatGPT plugin
 
 Adding the remote MCP server separately is not enough to replace the source plugin's packaged dependency.
 
@@ -147,7 +165,8 @@ Default output:
 ```text
 dist/gitlab-chatgpt-marketplace/
   .agents/plugins/marketplace.json
-  plugins/gitlab/
+  README.md
+  plugins/gitlab-self-hosted/
     .app.json
     .chatgpt-setup.json
     .codex-plugin/plugin.json
@@ -157,63 +176,57 @@ dist/gitlab-chatgpt-marketplace/
 The generated marketplace is named `ademkao-gitlab-chatgpt`; its plugin reference is:
 
 ```text
-gitlab@ademkao-gitlab-chatgpt
+gitlab-self-hosted@ademkao-gitlab-chatgpt
 ```
 
 The generated plugin intentionally differs from the portable source plugin:
 
-- `.codex-plugin/plugin.json` contains `apps: "./.app.json"`;
+- `.codex-plugin/plugin.json` has `name: "gitlab-self-hosted"` and `apps: "./.app.json"`;
 - `.codex-plugin/plugin.json` does **not** contain `mcpServers`;
-- `plugins/gitlab/.mcp.json` is absent from the generated artifact;
-- `.chatgpt-setup.json` records `artifact_type: "chatgpt-marketplace"`, `binding_mode: "app"`, the generated marketplace/plugin reference, and `source_local_mcp_removed: true`.
+- `plugins/gitlab-self-hosted/.mcp.json` is absent from the generated artifact;
+- `.app.json` uses the namespaced `gitlab-self-hosted` binding key;
+- `.chatgpt-setup.json` records the namespaced plugin ID/reference and the explicit import/install boundary.
 
-When you want `@GitLab` to use the remote App, import/install the **generated marketplace root**. Do not install the repository root `ademkao-codex-plugins` marketplace for this use case, because that root marketplace intentionally selects the portable localhost-oriented source plugin.
+When you want the self-hosted plugin to use the remote App, import/install the **generated marketplace root**. Generating the directory alone does not modify an already-installed plugin.
 
-The generated output is workspace-specific and gitignored. Do not commit a real workspace App/connector binding to the public repository.
+The generated output is workspace-specific and gitignored. Do not commit a real workspace App/connector binding to the public repository unless its portability is explicitly documented.
 
-## 6. Troubleshooting: OAuth succeeds but `@GitLab` exposes no tools
+## 6. Troubleshooting: OAuth succeeds but no GitLab tools are exposed
 
-If all of these are true:
+Check **package resolution first**, then App binding.
 
-- the remote MCP server is visible in MCP settings;
-- OAuth completed successfully;
-- the GitLab plugin and skills are installed; and
-- the conversation cannot call GitLab tools;
-
-check the **installed marketplace/plugin binding** before changing OAuth settings.
-
-A common broken state is:
+Deprecated/collision-prone state:
 
 ```text
-Installed: gitlab@ademkao-codex-plugins
-  -> packaged mcpServers
-  -> http://127.0.0.1:3333/mcp
-
-Separate MCP entry
-  -> https://gitlab-mcp.example.com/mcp
-  -> OAuth succeeds
+Reference: gitlab@ademkao-codex-plugins
+  -> generic `gitlab` id
+  -> may resolve to OpenAI curated GitLab instead of this repository
 ```
 
-Those are separate bindings. The working remote MCP entry does not implicitly replace the plugin's localhost dependency.
-
-The intended remote ChatGPT state is:
+Portable self-hosted state:
 
 ```text
-Installed: gitlab@ademkao-gitlab-chatgpt
+Installed: gitlab-self-hosted@ademkao-codex-plugins
+  -> packaged localhost MCP fallback
+  -> http://127.0.0.1:3333/mcp
+```
+
+Intended remote ChatGPT state:
+
+```text
+Installed: gitlab-self-hosted@ademkao-gitlab-chatgpt
   -> apps: ./.app.json
   -> existing connected App / connector
   -> https://gitlab-mcp.example.com/mcp
 ```
 
-If the generated ChatGPT plugin still contains `mcpServers` or `.mcp.json`, rebuild it with the current helper. If ChatGPT is still using `gitlab@ademkao-codex-plugins`, switch to/import the generated marketplace rather than re-running OAuth against the separate MCP entry.
+If OAuth works on a separate MCP entry but the conversation still cannot call GitLab tools, confirm that the installed plugin is `gitlab-self-hosted`, not generic `gitlab`. Then confirm that the generated App-bound marketplace was actually imported/installed. Re-running OAuth does not repair a package-identity mismatch.
 
 ## 7. Managed workspace App Templates
 
 OpenAI managed workspace **App Templates** are a separate platform feature intended for workspace administration. A managed template can provide guided configuration, create a workspace draft app, and let workspace administrators review, publish, and control access/actions.
 
 This repository does **not** currently ship or claim to be an OpenAI managed App Template. The repository's `.app.json.example` and `build_chatgpt_variant.py` are workspace binding helpers only.
-
-If an OpenAI-managed GitLab App Template becomes available for a target workspace, follow that workspace's Apps / administration flow independently.
 
 ## Remote URL safety
 
