@@ -23,6 +23,9 @@ MCP_PACKAGE = ROOT / "packages" / "mcp-server" / "package.json"
 VERSION_FILE = ROOT / "VERSION"
 APP_PLACEHOLDER = "REPLACE_WITH_GITLAB_APP_OR_CONNECTOR_ID"
 TEST_REMOTE_MCP = "https://gitlab-mcp.example.com/mcp"
+GENERATED_MARKETPLACE_NAME = "ademkao-gitlab-chatgpt"
+GENERATED_PLUGIN_RELATIVE = Path("plugins") / "gitlab"
+GENERATED_MARKETPLACE_RELATIVE = Path(".agents") / "plugins" / "marketplace.json"
 
 REQUIRED_MCP_FILES = [
     ROOT / "packages" / "mcp-server" / "src" / "config.ts",
@@ -171,7 +174,7 @@ def validate_workspace_binding_helper() -> None:
 
 def validate_generated_variant() -> None:
     with tempfile.TemporaryDirectory(prefix="codex-plugin-glab-") as temp_dir:
-        output = Path(temp_dir) / "gitlab-chatgpt"
+        output = Path(temp_dir) / "gitlab-chatgpt-marketplace"
         result = subprocess.run(
             [sys.executable, str(BUILDER), "--app-id", "test_connector_ci_123",
              "--mcp-url", TEST_REMOTE_MCP, "--output", str(output)],
@@ -180,21 +183,49 @@ def validate_generated_variant() -> None:
         if result.returncode != 0:
             fail(f"workspace binding helper failed: {result.stderr.strip()}")
 
-        generated_app = load_json_external(output / ".app.json")
-        generated_manifest = load_json_external(output / ".codex-plugin" / "plugin.json")
-        generated_setup = load_json_external(output / ".chatgpt-setup.json")
+        generated_plugin = output / GENERATED_PLUGIN_RELATIVE
+        generated_app = load_json_external(generated_plugin / ".app.json")
+        generated_manifest = load_json_external(generated_plugin / ".codex-plugin" / "plugin.json")
+        generated_setup = load_json_external(generated_plugin / ".chatgpt-setup.json")
+        generated_marketplace = load_json_external(output / GENERATED_MARKETPLACE_RELATIVE)
+
+        if generated_marketplace.get("name") != GENERATED_MARKETPLACE_NAME:
+            fail("generated marketplace has the wrong marketplace name")
+        if generated_marketplace.get("interface", {}).get("displayName") != "AdemKao GitLab ChatGPT":
+            fail("generated marketplace has the wrong display name")
+        marketplace_plugins = generated_marketplace.get("plugins")
+        if not isinstance(marketplace_plugins, list) or len(marketplace_plugins) != 1:
+            fail("generated marketplace must contain exactly one GitLab plugin entry")
+        marketplace_entry = marketplace_plugins[0]
+        if marketplace_entry.get("name") != "gitlab":
+            fail("generated marketplace plugin entry must be named gitlab")
+        if marketplace_entry.get("source", {}).get("source") != "local":
+            fail("generated marketplace plugin source must be local")
+        if marketplace_entry.get("source", {}).get("path") != "./plugins/gitlab":
+            fail("generated marketplace must point to ./plugins/gitlab")
+        if marketplace_entry.get("policy", {}).get("installation") != "AVAILABLE":
+            fail("generated marketplace installation policy must be AVAILABLE")
+        if marketplace_entry.get("policy", {}).get("authentication") not in {"ON_INSTALL", "ON_USE"}:
+            fail("generated marketplace authentication policy is invalid")
+
         if generated_app.get("apps", {}).get("gitlab", {}).get("id") != "test_connector_ci_123":
             fail("generated .app.json does not contain requested app ID")
         if generated_manifest.get("apps") != "./.app.json":
             fail("generated plugin manifest does not bind ./.app.json")
         if "mcpServers" in generated_manifest:
             fail("generated ChatGPT-bound plugin must not retain the source localhost mcpServers binding")
-        if (output / ".mcp.json").exists():
+        if (generated_plugin / ".mcp.json").exists():
             fail("generated ChatGPT-bound plugin must not include the source localhost .mcp.json")
         if generated_setup.get("mcp_url") != TEST_REMOTE_MCP:
             fail("generated setup metadata does not contain requested MCP URL")
         if generated_setup.get("binding_mode") != "app":
             fail("generated setup must identify app binding mode")
+        if generated_setup.get("artifact_type") != "chatgpt-marketplace":
+            fail("generated setup must identify the ChatGPT marketplace artifact")
+        if generated_setup.get("marketplace_name") != GENERATED_MARKETPLACE_NAME:
+            fail("generated setup must record the generated marketplace name")
+        if generated_setup.get("plugin_reference") != f"gitlab@{GENERATED_MARKETPLACE_NAME}":
+            fail("generated setup must record the generated plugin reference")
         if generated_setup.get("workspace_binding_helper_only") is not True:
             fail("generated setup must identify itself as workspace binding helper output")
         if generated_setup.get("not_openai_managed_app_template") is not True:
@@ -205,7 +236,7 @@ def validate_generated_variant() -> None:
             fail("generated setup must preserve explicit platform consent boundary")
         if generated_setup.get("source_local_mcp_removed") is not True:
             fail("generated setup must record removal of the source localhost MCP binding")
-        if (output / "workspace-binding").exists():
+        if (generated_plugin / "workspace-binding").exists():
             fail("generated plugin should not include the source workspace-binding helper directory")
 
     rejected_urls = [
