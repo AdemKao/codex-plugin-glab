@@ -10,7 +10,7 @@ An open-source GitLab integration for **ChatGPT, Codex, and MCP clients**. The r
 1. a GitLab plugin with workflow skills and safe routing; and
 2. a self-hosted GitLab MCP server backed by the GitLab REST API.
 
-> **Status:** v0.5.1 / early preview.
+> **Status:** v0.5.2 / early preview.
 >
 > **Third-party project:** this repository is not an official GitLab or OpenAI project and is not endorsed by either company.
 
@@ -25,7 +25,8 @@ The bundled server works with GitLab.com, GitLab Self-Managed, and GitLab Dedica
 ```text
 ChatGPT / Codex / MCP client
             |
-            | MCP over HTTP + OAuth or shared bearer
+            | MCP over Streamable HTTP
+            | OAuth or shared bearer
             v
 +---------------------------------------+
 | codex-plugin-glab MCP server          |
@@ -127,7 +128,73 @@ For the bundled PostgreSQL profile:
 docker compose --profile postgres up -d --build
 ```
 
-The MCP endpoint is `http://127.0.0.1:3333/mcp` locally. Remote ChatGPT/MCP deployments should expose it through HTTPS.
+The local endpoint is `http://127.0.0.1:3333/mcp`. Remote clients should use a reachable HTTPS endpoint such as `https://gitlab-mcp.example.com/mcp`.
+
+## Primary personal / Codex remote MCP setup
+
+For a personal Codex host, the primary self-hosted OAuth path is to add the deployed MCP server directly. You do **not** need `.app.json`, `build_chatgpt_variant.py`, or a managed workspace App Template for this path.
+
+1. Deploy the bundled server with `MCP_AUTH_MODE=oauth` behind HTTPS.
+2. Validate it:
+
+```bash
+python3 scripts/chatgpt_mcp_doctor.py \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+3. In the ChatGPT desktop/Codex MCP settings, choose **Add server**.
+4. Choose **Streamable HTTP** and enter the remote endpoint:
+
+```text
+https://gitlab-mcp.example.com/mcp
+```
+
+5. Save/restart when the client asks, then choose **Authenticate** when OAuth sign-in is shown.
+6. Let the client follow the server's OAuth discovery metadata, complete GitLab authorization, and verify a harmless read first.
+
+In OAuth mode, an unauthenticated `/mcp` request returns `401` with `WWW-Authenticate` pointing to Protected Resource Metadata. The server then exposes Authorization Server Metadata and CIMD/DCR support for compatible clients.
+
+## Localhost `.mcp.json` fallback
+
+The portable plugin intentionally keeps:
+
+```text
+plugins/gitlab/.mcp.json -> http://127.0.0.1:3333/mcp
+```
+
+This is a **local fallback** for running the bundled server on the same Codex host. Do not replace the source file with a maintainer-specific public URL just to make remote OAuth work.
+
+Local working-tree state, commits, and pushes remain local `git` / `glab` operations.
+
+## Optional workspace binding helper
+
+`plugins/gitlab/workspace-binding/.app.json.example` and `scripts/build_chatgpt_variant.py` are repository helpers for one narrow case: you already have a workspace app/connector ID and want an ignored plugin copy with that ID bound into `.app.json`.
+
+They are **not an OpenAI native App Template**, are not required for personal/Codex direct MCP setup, and do not create or publish a ChatGPT app.
+
+After an app/connector already exists, the helper can generate a workspace-specific copy:
+
+```bash
+python3 scripts/build_chatgpt_variant.py \
+  --app-id YOUR_EXISTING_WORKSPACE_APP_OR_CONNECTOR_ID \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+The ignored `dist/gitlab-chatgpt/` output contains:
+
+- `.app.json` with the existing workspace app/connector binding;
+- a copied `plugin.json` with `apps: "./.app.json"`; and
+- `.chatgpt-setup.json` explicitly marking the output as a workspace binding helper and **not** a managed App Template.
+
+The source plugin and localhost `.mcp.json` are not modified.
+
+## Managed workspace App Templates are separate
+
+OpenAI managed workspace **App Templates** are a separate platform feature for workspace admins/owners. A managed template provides a guided setup flow that can collect organization-specific configuration, create a workspace draft app, and let admins review/publish/manage access and actions.
+
+This repository does **not** currently ship or claim to be an OpenAI managed App Template. If a future GitLab template is provided through the OpenAI platform/plugin directory, follow that managed workspace flow independently from this repository's optional binding helper.
+
+See [docs/chatgpt-app.md](docs/chatgpt-app.md) for the full separation between direct remote MCP setup, local fallback, optional workspace binding, and managed workspace administration.
 
 ## OAuth endpoints
 
@@ -142,8 +209,6 @@ OAuth mode exposes:
 /oauth/gitlab/callback
 /mcp
 ```
-
-Unauthenticated `/mcp` requests return `401` with `WWW-Authenticate` pointing to Protected Resource Metadata.
 
 ## Safety defaults
 
@@ -194,81 +259,22 @@ Destructive operations such as repository-file deletion and pipeline cancellatio
 - CIMD fetches reject redirects and private-network targets by default and are bounded by size/time limits.
 - `OAUTH_ENCRYPTION_KEY` must be stored separately from the OAuth database/volume.
 
-## ChatGPT remote binding
-
-The portable plugin deliberately keeps its local Codex MCP configuration at:
-
-```text
-http://127.0.0.1:3333/mcp
-```
-
-ChatGPT cannot use that loopback endpoint as a remote workspace App. For ChatGPT, first deploy the bundled MCP server behind a public HTTPS URL such as:
-
-```text
-https://gitlab-mcp.example.com/mcp
-```
-
-Then validate the live OAuth deployment:
-
-```bash
-python3 scripts/chatgpt_mcp_doctor.py \
-  --mcp-url https://gitlab-mcp.example.com/mcp
-```
-
-The doctor verifies:
-
-- the remote URL is HTTPS and resolves only to public addresses;
-- Protected Resource Metadata is reachable;
-- Authorization Server Metadata is reachable and internally consistent; and
-- unauthenticated `/mcp` returns the OAuth `401` challenge with `resource_metadata`.
-
-Next, in a ChatGPT workspace/surface that supports Custom MCP Apps, explicitly create/connect a Custom MCP App pointing at the same HTTPS `/mcp` URL and complete the platform's user/admin consent flow. This repository does **not** silently create that App during plugin installation.
-
-After ChatGPT provides the workspace App/connector ID, build the bound plugin variant:
-
-```bash
-python3 scripts/build_chatgpt_variant.py \
-  --app-id YOUR_WORKSPACE_APP_ID \
-  --mcp-url https://gitlab-mcp.example.com/mcp
-```
-
-The command creates ignored `dist/gitlab-chatgpt/` output containing:
-
-- `.app.json` with the workspace App binding;
-- a patched `plugin.json` with `apps: "./.app.json"`; and
-- `.chatgpt-setup.json` documenting the expected remote MCP URL and explicit App-creation boundary.
-
-The source plugin, source `.app.json.example`, and localhost `.mcp.json` are not modified. The builder rejects HTTP, localhost, loopback, link-local, private-network literal IPs, embedded credentials, query/fragment data, and non-`/mcp` endpoints.
-
-ChatGPT plan, workspace-role, and surface availability can change independently of this repository. See [docs/chatgpt-app.md](docs/chatgpt-app.md) and verify the current platform requirements when deploying.
-
-## Codex plugin
-
-The portable plugin lives at `plugins/gitlab/`. Its default `.mcp.json` targets `http://127.0.0.1:3333/mcp`.
-
-For local development:
-
-```bash
-mkdir -p ~/plugins ~/.agents/plugins
-ln -sfn "$PWD/plugins/gitlab" ~/plugins/gitlab
-```
-
-Then add the `gitlab` marketplace entry from `.agents/plugins/marketplace.json` to your personal marketplace configuration and restart Codex.
-
 ## Repository layout
 
 ```text
-plugins/gitlab/                         # ChatGPT/Codex plugin assets and skills
+plugins/gitlab/
+  .mcp.json                              # localhost fallback
+  workspace-binding/.app.json.example   # optional existing-app binding helper input
 packages/mcp-server/
-  src/oauth-gateway.ts                 # MCP OAuth, CIMD/DCR, GitLab OAuth
-  src/oauth-store.ts                   # encrypted file backend + store contract
-  src/postgres-oauth-store.ts          # multi-replica PostgreSQL backend
-  src/register-tools.ts                # core GitLab tools
-  src/register-v05-tools.ts            # repository/MR/pipeline tools
+  src/oauth-gateway.ts                  # MCP OAuth, CIMD/DCR, GitLab OAuth
+  src/oauth-store.ts                    # encrypted file backend + store contract
+  src/postgres-oauth-store.ts           # multi-replica PostgreSQL backend
+  src/register-tools.ts                 # core GitLab tools
+  src/register-v05-tools.ts             # repository/MR/pipeline tools
   migrations/001_oauth_postgres.sql
-scripts/build_chatgpt_variant.py       # workspace App binding generator
-scripts/chatgpt_binding.py             # remote URL validation helpers
-scripts/chatgpt_mcp_doctor.py          # live OAuth/MCP deployment checks
+scripts/build_chatgpt_variant.py        # optional workspace binding helper
+scripts/chatgpt_binding.py              # remote URL validation helpers
+scripts/chatgpt_mcp_doctor.py           # live OAuth/MCP deployment checks
 Dockerfile
 docker-compose.yml
 .env.example
@@ -286,13 +292,13 @@ npm install
 npm run check
 ```
 
-CI builds a fake ChatGPT remote variant, verifies unsafe remote URL rejection, starts PostgreSQL 17 for multi-replica OAuth integration tests, runs TypeScript strict build, and builds the production Docker image.
+CI validates repository structure and the workspace binding helper, rejects unsafe remote URLs, starts PostgreSQL 17 for multi-replica OAuth integration tests, runs the TypeScript test/build gate, and builds the production Docker image.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Authentication](docs/authentication.md)
-- [ChatGPT App setup](docs/chatgpt-app.md)
+- [ChatGPT / Codex remote MCP setup](docs/chatgpt-app.md)
 - [Self-Managed GitLab](docs/self-managed.md)
 - [Capability matrix](docs/capability-matrix.md)
 - [Roadmap](docs/roadmap.md)
@@ -300,7 +306,7 @@ CI builds a fake ChatGPT remote variant, verifies unsafe remote URL rejection, s
 
 ## Versioning
 
-`VERSION`, the plugin manifest, and the MCP package version must match. CI validates this before merge. User-visible changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+`VERSION`, the plugin manifest, the MCP package version, and the runtime-reported version must match. CI validates the release metadata before merge. User-visible changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
