@@ -11,6 +11,8 @@ import { dirname } from "node:path";
 import type { GitLabIdentity } from "./auth-context.js";
 import { decryptJson, encryptJson, tokenHash, type EncryptedEnvelope } from "./oauth-crypto.js";
 
+export type MaybePromise<T> = T | Promise<T>;
+
 export interface OAuthClientRecord {
   clientId: string;
   clientName?: string;
@@ -64,6 +66,25 @@ export interface OAuthSessionRecord {
   updatedAt: number;
 }
 
+export interface OAuthStoreBackend {
+  init(): MaybePromise<void>;
+  close(): MaybePromise<void>;
+  cleanup(now?: number): MaybePromise<void>;
+  putClient(client: OAuthClientRecord): MaybePromise<void>;
+  getClient(clientId: string): MaybePromise<OAuthClientRecord | undefined>;
+  putTransaction(transaction: OAuthTransactionRecord): MaybePromise<void>;
+  takeTransaction(id: string): MaybePromise<OAuthTransactionRecord | undefined>;
+  putAuthorizationCode(code: OAuthAuthorizationCodeRecord): MaybePromise<void>;
+  takeAuthorizationCode(rawCode: string): MaybePromise<OAuthAuthorizationCodeRecord | undefined>;
+  putSession(session: OAuthSessionRecord): MaybePromise<void>;
+  getSessionById(sessionId: string): MaybePromise<OAuthSessionRecord | undefined>;
+  getSessionByAccessToken(rawToken: string): MaybePromise<OAuthSessionRecord | undefined>;
+  getSessionByRefreshToken(rawToken: string): MaybePromise<OAuthSessionRecord | undefined>;
+  updateSession(session: OAuthSessionRecord): MaybePromise<void>;
+  rotateSessionByRefreshToken(rawRefreshToken: string, session: OAuthSessionRecord): MaybePromise<boolean>;
+  deleteSession(sessionId: string): MaybePromise<void>;
+}
+
 interface OAuthStoreData {
   version: 1;
   clients: Record<string, OAuthClientRecord>;
@@ -82,7 +103,11 @@ function emptyStore(): OAuthStoreData {
   };
 }
 
-export class OAuthStore {
+/**
+ * Encrypted single-process file backend. This backend intentionally remains
+ * simple and is not safe for multiple server replicas writing the same file.
+ */
+export class OAuthStore implements OAuthStoreBackend {
   private data: OAuthStoreData;
 
   constructor(
@@ -92,6 +117,9 @@ export class OAuthStore {
     this.data = this.load();
     this.cleanup();
   }
+
+  init(): void {}
+  close(): void {}
 
   private load(): OAuthStoreData {
     if (!existsSync(this.path)) return emptyStore();
@@ -187,6 +215,11 @@ export class OAuthStore {
     this.save();
   }
 
+  getSessionById(sessionId: string): OAuthSessionRecord | undefined {
+    this.cleanup();
+    return this.data.sessions[sessionId];
+  }
+
   getSessionByAccessToken(rawToken: string): OAuthSessionRecord | undefined {
     this.cleanup();
     const hash = tokenHash(rawToken);
@@ -205,6 +238,15 @@ export class OAuthStore {
     }
     this.data.sessions[session.id] = session;
     this.save();
+  }
+
+  rotateSessionByRefreshToken(rawRefreshToken: string, session: OAuthSessionRecord): boolean {
+    this.cleanup();
+    const current = this.data.sessions[session.id];
+    if (!current || current.refreshTokenHash !== tokenHash(rawRefreshToken)) return false;
+    this.data.sessions[session.id] = session;
+    this.save();
+    return true;
   }
 
   deleteSession(sessionId: string): void {
