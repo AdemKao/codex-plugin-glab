@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gitlab"
 MANIFEST = PLUGIN / ".codex-plugin" / "plugin.json"
 MCP = PLUGIN / ".mcp.json"
-APP_TEMPLATE = PLUGIN / "app-template" / ".app.json.example"
+WORKSPACE_BINDING_TEMPLATE = PLUGIN / "workspace-binding" / ".app.json.example"
 BUILDER = ROOT / "scripts" / "build_chatgpt_variant.py"
 DOCTOR = ROOT / "scripts" / "chatgpt_mcp_doctor.py"
 BINDING_HELPERS = ROOT / "scripts" / "chatgpt_binding.py"
@@ -159,14 +159,14 @@ def validate_mcp_package() -> None:
             fail(f"missing MCP server file: {path.relative_to(ROOT)}")
 
 
-def validate_app_template() -> None:
-    template = load_json(APP_TEMPLATE)
+def validate_workspace_binding_helper() -> None:
+    template = load_json(WORKSPACE_BINDING_TEMPLATE)
     app_id = template.get("apps", {}).get("gitlab", {}).get("id")
     if app_id != APP_PLACEHOLDER:
-        fail("app template must contain the documented GitLab app/connector placeholder")
+        fail("workspace binding helper must contain the documented app/connector placeholder")
     for path in (BUILDER, DOCTOR, BINDING_HELPERS):
         if not path.is_file():
-            fail(f"missing ChatGPT binding tool: {path.relative_to(ROOT)}")
+            fail(f"missing ChatGPT/Codex binding tool: {path.relative_to(ROOT)}")
 
 
 def validate_generated_variant() -> None:
@@ -178,7 +178,7 @@ def validate_generated_variant() -> None:
             cwd=ROOT, text=True, capture_output=True, check=False,
         )
         if result.returncode != 0:
-            fail(f"ChatGPT variant builder failed: {result.stderr.strip()}")
+            fail(f"workspace binding helper failed: {result.stderr.strip()}")
 
         generated_app = load_json_external(output / ".app.json")
         generated_manifest = load_json_external(output / ".codex-plugin" / "plugin.json")
@@ -188,11 +188,17 @@ def validate_generated_variant() -> None:
         if generated_manifest.get("apps") != "./.app.json":
             fail("generated plugin manifest does not bind ./.app.json")
         if generated_setup.get("mcp_url") != TEST_REMOTE_MCP:
-            fail("generated ChatGPT setup metadata does not contain requested MCP URL")
+            fail("generated setup metadata does not contain requested MCP URL")
+        if generated_setup.get("workspace_binding_helper_only") is not True:
+            fail("generated setup must identify itself as workspace binding helper output")
+        if generated_setup.get("not_openai_managed_app_template") is not True:
+            fail("generated setup must not claim to be an OpenAI managed App Template")
+        if generated_setup.get("requires_existing_workspace_app_or_connector") is not True:
+            fail("generated setup must require an existing workspace app/connector")
         if generated_setup.get("requires_explicit_chatgpt_app_creation") is not True:
-            fail("generated ChatGPT setup must preserve explicit platform consent boundary")
-        if (output / "app-template").exists():
-            fail("generated plugin should not include the source app-template directory")
+            fail("generated setup must preserve explicit platform consent boundary")
+        if (output / "workspace-binding").exists():
+            fail("generated plugin should not include the source workspace-binding helper directory")
 
     rejected_urls = [
         "http://gitlab-mcp.example.com/mcp",
@@ -210,7 +216,7 @@ def validate_generated_variant() -> None:
                 cwd=ROOT, text=True, capture_output=True, check=False,
             )
             if result.returncode == 0:
-                fail(f"ChatGPT variant builder accepted unsafe MCP URL: {bad_url}")
+                fail(f"workspace binding helper accepted unsafe MCP URL: {bad_url}")
 
 
 def validate_marketplace() -> None:
@@ -268,7 +274,7 @@ def main() -> None:
     validate_manifest()
     validate_mcp()
     validate_mcp_package()
-    validate_app_template()
+    validate_workspace_binding_helper()
     validate_generated_variant()
     validate_marketplace()
     validate_skills()

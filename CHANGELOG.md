@@ -13,6 +13,30 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 - Observability, audit events, and operational metrics for hosted deployments.
 - Additional GitLab release/member/milestone workflows.
 
+## [0.5.2] - 2026-08-23
+
+### Fixed
+
+- Corrected the self-hosted MCP/OAuth installation UX for personal/Codex users: the primary path is now **Add server -> Streamable HTTP -> remote HTTPS `/mcp` -> OAuth discovery/authentication**.
+- Removed the implication that `.app.json`, a workspace app/connector ID, or `scripts/build_chatgpt_variant.py` is required for direct personal/Codex remote MCP setup.
+- Removed the implication that the repository's `.app.json.example` or binding builder is an OpenAI native/managed App Template.
+
+### Changed
+
+- Preserved `plugins/gitlab/.mcp.json` at `http://127.0.0.1:3333/mcp` as an explicit same-host/local Codex fallback rather than a remote-install configuration.
+- Moved the optional helper input from `plugins/gitlab/app-template/.app.json.example` to `plugins/gitlab/workspace-binding/.app.json.example` to remove App Template naming ambiguity.
+- Repositioned `scripts/build_chatgpt_variant.py` as an optional **workspace binding helper** for an already-existing workspace app/connector ID.
+- Generated `.chatgpt-setup.json` now identifies itself as workspace-binding-helper output, requires an existing workspace app/connector, and explicitly states that it is not an OpenAI managed App Template.
+- Managed workspace App Templates are documented as a separate administrator/platform feature with their own guided setup, review, publication, and access-management flow.
+- Synchronized the English and Traditional Chinese README, ChatGPT/Codex integration docs, setup skill, capability matrix, roadmap, and release documentation around the same installation model.
+- Synchronized `VERSION`, plugin manifest, MCP package, and MCP runtime-reported version at v0.5.2.
+
+### Security
+
+- Direct remote setup continues to require a public HTTPS `/mcp` endpoint for OAuth deployments.
+- The live MCP doctor continues to reject non-public DNS resolutions and verifies Protected Resource Metadata, Authorization Server Metadata, and the unauthenticated `/mcp` OAuth challenge before connection.
+- The optional workspace binding helper continues to reject HTTP, localhost, loopback, private/link-local literal IPs, embedded credentials, query/fragment data, and non-`/mcp` endpoints.
+
 ## [0.5.1] - 2026-08-23
 
 ### Added
@@ -25,8 +49,8 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 
 ### Changed
 
-- `scripts/build_chatgpt_variant.py` now requires both `--app-id` and `--mcp-url`, validates the remote endpoint for a ChatGPT deployment profile, consumes the source `.app.json.example` template, and leaves the portable localhost Codex configuration untouched.
-- ChatGPT setup documentation now makes the platform consent boundary explicit: this repository prepares and validates the binding, while the Custom MCP App itself must be explicitly created/connected in a supported ChatGPT workspace/surface.
+- `scripts/build_chatgpt_variant.py` requires both `--app-id` and `--mcp-url`, validates the remote endpoint, and leaves the portable localhost Codex configuration untouched.
+- ChatGPT setup documentation made the platform consent boundary explicit; v0.5.2 further clarified that this binding is optional rather than the primary personal/Codex remote MCP setup path.
 - Plugin, MCP package, and release version are synchronized at v0.5.1.
 
 ### Security
