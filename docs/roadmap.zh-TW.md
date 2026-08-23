@@ -45,18 +45,31 @@
 - pipeline create/retry/cancel tools；
 - Docker Compose PostgreSQL profile 與 migration 文件。
 
-## v0.5.1 — ChatGPT remote App binding UX
+## v0.5.1 — Initial workspace binding helper
 
 已完成：
 
-- Issue #8 的 first-class remote ChatGPT binding generator；
-- workspace binding 必須提供 `--app-id` + `--mcp-url`；
+- live remote MCP doctor，驗證 Protected Resource Metadata、Authorization Server Metadata 與未登入 `/mcp` OAuth challenge；
 - public HTTPS `/mcp` URL validation 與 unsafe target rejection；
-- live ChatGPT MCP doctor，驗證 Protected Resource Metadata、Authorization Server Metadata 與未登入 `/mcp` OAuth challenge；
-- 產生 `.app.json` 與 `.chatgpt-setup.json`，不修改 portable source plugin；
+- initial workspace-specific `.app.json` binding generator；
 - 保留 local Codex 使用的 localhost `.mcp.json`；
-- CI 建立 fake ChatGPT-bound variant 並驗證 unsafe URL rejection；
-- 文件明確說明 ChatGPT Custom MCP App creation / consent boundary。
+- CI 驗證 helper generation 與 unsafe URL rejection。
+
+v0.5.2 重新整理 v0.5.1 引入的產品定位，避免 optional binding helper 被誤解成 personal/Codex 的主要安裝方式，或被誤稱為 OpenAI 原生 App Template。
+
+## v0.5.2 — Direct Codex MCP / OAuth installation UX
+
+已完成：
+
+- personal/Codex remote setup 明確改成 **Add server -> Streamable HTTP -> remote HTTPS `/mcp` -> OAuth discovery/authentication**；
+- direct remote OAuth 不再需要 `.app.json`、workspace App / connector ID 或 `build_chatgpt_variant.py`；
+- portable `plugins/gitlab/.mcp.json` 保留 `http://127.0.0.1:3333/mcp`，作為 same-host local fallback；
+- helper input 從 `app-template/.app.json.example` 移到 `workspace-binding/.app.json.example`，消除 App Template 命名歧義；
+- `build_chatgpt_variant.py` 重新定位成 optional **workspace binding helper**，且要求 existing workspace App / connector ID；
+- generated helper metadata 與 CI validation 明確聲明 output 不是 OpenAI managed App Template；
+- managed workspace App Templates 獨立說明為 administrator / platform feature，而不是本 repo 提供的 template；
+- 同步英文 / 繁中 README、ChatGPT/Codex setup docs、setup skill、capability matrix、roadmap、CHANGELOG；
+- `VERSION`、plugin manifest、MCP package 與 MCP runtime version 同步到 `0.5.2`。
 
 ## v0.6 — Policy、observability、compatibility
 
