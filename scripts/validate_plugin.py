@@ -14,17 +14,20 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ID = "gitlab-self-hosted"
 PLUGIN = ROOT / "plugins" / PLUGIN_ID
 MANIFEST = PLUGIN / ".codex-plugin" / "plugin.json"
-MCP = PLUGIN / ".mcp.json"
+MCP_TEMPLATE = PLUGIN / "workspace-binding" / ".mcp.local.json.example"
 APP_TEMPLATE = PLUGIN / "workspace-binding" / ".app.json.example"
 MARKETPLACE = ROOT / ".agents" / "plugins" / "marketplace.json"
 BUILDER = ROOT / "scripts" / "build_chatgpt_variant.py"
 PERSONAL_BUILDER = ROOT / "scripts" / "build_personal_variant.py"
+LOCAL_BUILDER = ROOT / "scripts" / "build_local_variant.py"
 MCP_PACKAGE = ROOT / "packages" / "mcp-server" / "package.json"
 VERSION_FILE = ROOT / "VERSION"
 PLACEHOLDER = "REPLACE_WITH_GITLAB_APP_OR_CONNECTOR_ID"
 GENERATED_MARKETPLACE = "ademkao-gitlab-chatgpt"
 GENERATED_PERSONAL_MARKETPLACE = "ademkao-gitlab-remote"
+GENERATED_LOCAL_MARKETPLACE = "ademkao-gitlab-local"
 TEST_MCP_URL = "https://gitlab-mcp.example.com/mcp"
+LOCAL_MCP_URL = "http://127.0.0.1:3333/mcp"
 
 DOC_PAIRS = [
     ("README.md", "README.zh-TW.md"),
@@ -67,19 +70,21 @@ def validate_source_package() -> None:
         fail("plugin folder and plugin.json.name must both be gitlab-self-hosted")
     if manifest.get("version") != version():
         fail("plugin version must match VERSION")
-    if manifest.get("skills") != "./skills/" or manifest.get("mcpServers") != "./.mcp.json":
-        fail("portable plugin must keep the standard skills and localhost MCP paths")
-    if "apps" in manifest:
-        fail("portable source plugin must not contain a workspace-specific apps binding")
+    if manifest.get("skills") != "./skills/":
+        fail("portable plugin must keep the standard skills path")
+    if "mcpServers" in manifest or "apps" in manifest:
+        fail("portable plugin must be endpoint-unbound; MCP/App binding belongs to generated variants")
+    if (PLUGIN / ".mcp.json").exists():
+        fail("portable plugin must not ship an automatically loaded .mcp.json")
 
     interface = manifest.get("interface", {})
     for key in ("displayName", "shortDescription", "longDescription", "developerName", "category", "capabilities", "defaultPrompt", "brandColor"):
         if interface.get(key) in (None, "", []):
             fail(f"interface.{key} is required")
 
-    mcp = load(MCP).get("mcpServers", {}).get("gitlab", {})
-    if mcp.get("type") != "http" or mcp.get("url") != "http://127.0.0.1:3333/mcp":
-        fail("portable localhost MCP fallback changed unexpectedly")
+    mcp = load(MCP_TEMPLATE).get("mcpServers", {}).get("gitlab", {})
+    if mcp.get("type") != "http" or mcp.get("url") != LOCAL_MCP_URL:
+        fail("local MCP template changed unexpectedly")
 
     apps = load(APP_TEMPLATE).get("apps", {})
     if set(apps) != {PLUGIN_ID} or apps[PLUGIN_ID].get("id") != PLACEHOLDER:
@@ -141,12 +146,18 @@ def validate_generated_marketplace() -> None:
         if generated_manifest.get("name") != PLUGIN_ID or generated_manifest.get("apps") != "./.app.json":
             fail("generated plugin manifest has the wrong identity/App binding")
         if "mcpServers" in generated_manifest or (plugin / ".mcp.json").exists():
-            fail("generated App-bound plugin must not retain localhost MCP binding")
+            fail("generated App-bound plugin must not contain a direct MCP binding")
         if generated_app.get("apps", {}).get(PLUGIN_ID, {}).get("id") != "test_connector_ci_123":
             fail("generated .app.json has the wrong app binding")
         if generated_setup.get("plugin_id") != PLUGIN_ID or generated_setup.get("plugin_reference") != expected_ref:
             fail("generated setup metadata has the wrong plugin identity/reference")
-        for flag in ("requires_existing_workspace_app_or_connector", "requires_marketplace_import_or_install", "does_not_modify_existing_installation", "source_local_mcp_removed"):
+        for flag in (
+            "requires_existing_workspace_app_or_connector",
+            "requires_marketplace_import_or_install",
+            "does_not_modify_existing_installation",
+            "source_portable_unbound",
+            "endpoint_configured_on_app",
+        ):
             if generated_setup.get(flag) is not True:
                 fail(f"generated setup must set {flag}=true")
         if (output / "plugins" / "gitlab").exists():
@@ -211,8 +222,9 @@ def validate_generated_personal_marketplace() -> None:
             fail("generated personal setup must identify remote-mcp binding mode")
         if generated_setup.get("requires_chatgpt_app_binding") is not False:
             fail("generated personal setup must not require ChatGPT App binding")
-        if generated_setup.get("source_local_mcp_replaced") is not True:
-            fail("generated personal setup must record replacement of the local MCP URL")
+        for flag in ("source_portable_unbound", "endpoint_configured_explicitly"):
+            if generated_setup.get(flag) is not True:
+                fail(f"generated personal setup must set {flag}=true")
         if (output / "plugins" / "gitlab").exists() or (plugin / "workspace-binding").exists():
             fail("generated personal marketplace must not recreate generic or workspace-only packages")
 
@@ -233,6 +245,41 @@ def validate_generated_personal_marketplace() -> None:
             )
             if run.returncode == 0:
                 fail(f"personal builder accepted unsafe MCP URL: {bad_url}")
+
+
+def validate_generated_local_marketplace() -> None:
+    with tempfile.TemporaryDirectory(prefix="codex-plugin-glab-local-") as temp:
+        output = Path(temp) / "marketplace"
+        run = subprocess.run(
+            [sys.executable, str(LOCAL_BUILDER), "--output", str(output)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if run.returncode != 0:
+            fail(f"local marketplace builder failed: {run.stderr.strip()}")
+
+        plugin = output / "plugins" / PLUGIN_ID
+        generated_manifest = load(plugin / ".codex-plugin" / "plugin.json")
+        generated_mcp = load(plugin / ".mcp.json")
+        generated_setup = load(plugin / ".chatgpt-setup.json")
+        generated_marketplace = load(output / ".agents" / "plugins" / "marketplace.json")
+
+        expected_ref = f"{PLUGIN_ID}@{GENERATED_LOCAL_MARKETPLACE}"
+        if generated_marketplace.get("name") != GENERATED_LOCAL_MARKETPLACE:
+            fail("generated local marketplace has the wrong catalog name")
+        if generated_manifest.get("mcpServers") != "./.mcp.json" or "apps" in generated_manifest:
+            fail("generated local plugin must contain only the explicit MCP binding")
+        if generated_mcp.get("mcpServers", {}).get("gitlab", {}).get("url") != LOCAL_MCP_URL:
+            fail("generated local MCP manifest has the wrong localhost URL")
+        if generated_setup.get("plugin_reference") != expected_ref or generated_setup.get("binding_mode") != "local-mcp":
+            fail("generated local setup metadata is incorrect")
+        for flag in ("source_portable_unbound", "endpoint_configured_explicitly", "requires_local_mcp_server"):
+            if generated_setup.get(flag) is not True:
+                fail(f"generated local setup must set {flag}=true")
+        if (plugin / "workspace-binding").exists():
+            fail("generated local marketplace must not retain workspace-only templates")
 
 
 def validate_skills_and_docs() -> None:
@@ -257,6 +304,7 @@ def main() -> None:
     validate_release_metadata()
     validate_generated_marketplace()
     validate_generated_personal_marketplace()
+    validate_generated_local_marketplace()
     validate_skills_and_docs()
     print("codex-plugin-glab validation passed")
 
