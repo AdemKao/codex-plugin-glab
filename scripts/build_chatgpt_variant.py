@@ -151,7 +151,8 @@ def build(app_id: str, mcp_url: str, output: Path, force: bool) -> None:
 
     setup = {
         "profile": "workspace-binding-helper",
-        "artifact_type": "workspace-marketplace-source",
+        "artifact_type": "chatgpt-marketplace",
+        "workspace_specific_source": True,
         "binding_mode": "app",
         "mcp_url": mcp_url,
         "app_id": app_id,
