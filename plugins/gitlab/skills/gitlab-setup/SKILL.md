@@ -1,19 +1,19 @@
 ---
 name: gitlab-setup
-description: Configure and troubleshoot GitLab access for this plugin. Use when authentication fails, MCP tools are missing, a personal/Codex remote MCP server must be added, workspace binding is needed, the GitLab host is unknown, or glab/git identity and host configuration must be verified.
+description: Configure and troubleshoot GitLab access for this plugin. Use when authentication fails, MCP tools are missing, a Codex remote MCP server must be added, ChatGPT app binding is missing, the GitLab host is unknown, or glab/git identity and host configuration must be verified.
 ---
 
 # GitLab Setup
 
 ## Goal
 
-Establish the least-privilege GitLab integration before repository work. The primary remote path is the self-hosted MCP server bundled with this repository; GitLab native MCP is optional.
+Establish the least-privilege GitLab integration before repository work. Keep Codex/native MCP configuration and ChatGPT plugin App binding as separate layers: a remote MCP server that works on its own does not automatically become the `@GitLab` plugin's tool binding.
 
 ## Choose the client path first
 
-### Personal / Codex remote MCP — primary path
+### Codex / native MCP remote server
 
-Use the client's MCP settings directly:
+Use the client's MCP settings directly when the goal is to make GitLab MCP tools available to Codex/native MCP usage:
 
 1. deploy the bundled MCP server behind public HTTPS;
 2. use `MCP_AUTH_MODE=oauth` for per-user identity;
@@ -25,7 +25,21 @@ Use the client's MCP settings directly:
 8. choose **Authenticate** and complete OAuth discovery / GitLab authorization; and
 9. test a harmless read.
 
-Do not require `.app.json`, `build_chatgpt_variant.py`, or an App Template for this direct personal/Codex path.
+This direct MCP path does not require `.app.json` or `build_chatgpt_variant.py` when the remote MCP server itself is the capability being invoked.
+
+### ChatGPT `@GitLab` plugin with remote MCP
+
+ChatGPT plugin invocation has an additional binding requirement. Installing this source plugin gives it the packaged `mcpServers` dependency from `./.mcp.json`, which intentionally points at localhost for same-host Codex use. Adding and authenticating another remote MCP server separately does **not** replace that packaged dependency.
+
+For `@GitLab` to expose tools from a remote deployment:
+
+1. create/connect the ChatGPT App / connector that points at the remote HTTPS `/mcp` endpoint;
+2. complete OAuth for that App/connector;
+3. obtain the existing App/connector ID;
+4. build the ChatGPT-bound plugin variant with `scripts/build_chatgpt_variant.py`;
+5. install/use that generated variant.
+
+The generated ChatGPT-bound variant uses `apps: "./.app.json"`, removes `mcpServers`, and removes the copied localhost `.mcp.json`, so it cannot accidentally keep the local fallback as a competing dependency.
 
 ### Local Codex fallback
 
@@ -143,20 +157,26 @@ python3 scripts/chatgpt_mcp_doctor.py \
 
 The doctor checks the public HTTPS URL, DNS/public-address safety, Protected Resource Metadata, Authorization Server Metadata, and the unauthenticated OAuth challenge.
 
-## Personal / Codex installation
+## Troubleshooting: OAuth succeeds but `@GitLab` has no tools
 
-After the doctor passes:
+Treat this as a binding problem before changing OAuth settings when all of the following are true:
 
-1. open the ChatGPT desktop / Codex MCP settings;
-2. choose **Add server**;
-3. choose **Streamable HTTP**;
-4. enter `https://gitlab-mcp.example.com/mcp`;
-5. save and restart if requested;
-6. choose **Authenticate** when OAuth is offered;
-7. complete GitLab OAuth; and
-8. test harmless reads before enabling writes.
+- the remote MCP server is present in MCP settings;
+- OAuth completed successfully;
+- the GitLab plugin is installed and its skills are visible; and
+- the ChatGPT conversation still cannot see GitLab tools.
 
-If a client cannot complete OAuth discovery, inspect the `401` challenge and discovery metadata before changing server security settings.
+Check the plugin details. If the plugin shows its packaged **MCP server** from the portable source plugin while the working remote server exists as a separate MCP entry, the two are not automatically linked. Do not keep retrying OAuth.
+
+Use the App-binding path instead:
+
+```bash
+python3 scripts/build_chatgpt_variant.py \
+  --app-id <existing-chatgpt-app-or-connector-id> \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+The generated manifest must contain `apps: "./.app.json"` and must not contain `mcpServers`; the generated directory must not contain `.mcp.json`.
 
 ## Optional existing-workspace binding
 

@@ -187,8 +187,14 @@ def validate_generated_variant() -> None:
             fail("generated .app.json does not contain requested app ID")
         if generated_manifest.get("apps") != "./.app.json":
             fail("generated plugin manifest does not bind ./.app.json")
+        if "mcpServers" in generated_manifest:
+            fail("generated ChatGPT-bound plugin must not retain the source localhost mcpServers binding")
+        if (output / ".mcp.json").exists():
+            fail("generated ChatGPT-bound plugin must not include the source localhost .mcp.json")
         if generated_setup.get("mcp_url") != TEST_REMOTE_MCP:
             fail("generated setup metadata does not contain requested MCP URL")
+        if generated_setup.get("binding_mode") != "app":
+            fail("generated setup must identify app binding mode")
         if generated_setup.get("workspace_binding_helper_only") is not True:
             fail("generated setup must identify itself as workspace binding helper output")
         if generated_setup.get("not_openai_managed_app_template") is not True:
@@ -197,6 +203,8 @@ def validate_generated_variant() -> None:
             fail("generated setup must require an existing workspace app/connector")
         if generated_setup.get("requires_explicit_chatgpt_app_creation") is not True:
             fail("generated setup must preserve explicit platform consent boundary")
+        if generated_setup.get("source_local_mcp_removed") is not True:
+            fail("generated setup must record removal of the source localhost MCP binding")
         if (output / "workspace-binding").exists():
             fail("generated plugin should not include the source workspace-binding helper directory")
 
