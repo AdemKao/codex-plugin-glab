@@ -45,18 +45,29 @@ Completed:
 - pipeline create/retry/cancel tools;
 - Docker Compose PostgreSQL profile and migration documentation.
 
-## v0.5.1 — ChatGPT remote App binding UX
+## v0.5.1 — Initial ChatGPT remote binding UX
 
 Completed:
 
-- first-class remote ChatGPT binding generator for Issue #8;
-- required `--app-id` + `--mcp-url` workspace binding inputs;
-- public HTTPS `/mcp` URL validation with unsafe target rejection;
-- live ChatGPT MCP doctor for Protected Resource Metadata, Authorization Server Metadata, and unauthenticated `/mcp` OAuth challenge checks;
-- generated `.app.json` and `.chatgpt-setup.json` without modifying the portable source plugin;
+- remote OAuth MCP URL validator and live doctor;
+- workspace-specific `.app.json` binding generation for an already-created App/connector;
 - preserved localhost `.mcp.json` for local Codex;
-- CI coverage for a fake ChatGPT-bound variant and unsafe URL rejection;
-- explicit documentation of the ChatGPT Custom MCP App creation/consent boundary.
+- CI coverage for generated binding output and unsafe URL rejection;
+- explicit platform consent boundary documentation.
+
+## v0.5.2 — Codex remote MCP / OAuth installation UX
+
+Completed:
+
+- personal/Codex remote self-host installation is documented as **Add server -> remote HTTPS `/mcp` -> OAuth discovery**;
+- localhost `plugins/gitlab/.mcp.json` remains a local Codex fallback instead of being repurposed for remote deployments;
+- `plugins/gitlab/workspace-binding/.app.json.example` and `scripts/build_chatgpt_variant.py` are explicitly scoped as workspace binding helpers for an existing App/connector;
+- removed the misleading `app-template/` source path and added validation that prevents it from returning;
+- generated binding metadata now states that an existing workspace App/connector is required and that this repository does not generate an OpenAI managed workspace App Template;
+- managed workspace App Template/provisioning is documented separately as a platform/admin capability;
+- remote MCP doctor wording is client-neutral for Codex/ChatGPT OAuth validation;
+- README, Traditional Chinese docs, ChatGPT docs, setup skill, capability matrix, roadmap, and changelog synchronized to the same installation model;
+- plugin, MCP package, runtime, tooling user agent, and release version synchronized at `0.5.2`.
 
 ## v0.6 — Policy, observability, and compatibility
 
