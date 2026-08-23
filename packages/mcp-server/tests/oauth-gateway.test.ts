@@ -22,9 +22,10 @@ function fixture(writeEnabled = false) {
   return { dir, gateway: new OAuthGateway(config) };
 }
 
-test("publishes MCP protected-resource and authorization-server metadata", () => {
+test("publishes MCP protected-resource and authorization-server metadata", async () => {
   const { dir, gateway } = fixture();
   try {
+    await gateway.init();
     assert.deepEqual(gateway.protectedResourceMetadata(), {
       resource: "https://mcp.example.com/mcp",
       authorization_servers: ["https://mcp.example.com"],
@@ -34,16 +35,19 @@ test("publishes MCP protected-resource and authorization-server metadata", () =>
     const metadata = gateway.authorizationServerMetadata();
     assert.equal(metadata.issuer, "https://mcp.example.com");
     assert.equal(metadata.registration_endpoint, "https://mcp.example.com/oauth/register");
+    assert.equal(metadata.client_id_metadata_document_supported, true);
     assert.deepEqual(metadata.code_challenge_methods_supported, ["S256"]);
   } finally {
+    await gateway.close();
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("DCR client registration and downstream PKCE authorization redirect to GitLab", () => {
+test("DCR client registration and downstream PKCE authorization redirect to GitLab", async () => {
   const { dir, gateway } = fixture();
   try {
-    const registration = gateway.registerClient({
+    await gateway.init();
+    const registration = await gateway.registerClient({
       client_name: "MCP Test Client",
       redirect_uris: ["https://client.example/oauth/callback"],
       token_endpoint_auth_method: "none",
@@ -60,7 +64,7 @@ test("DCR client registration and downstream PKCE authorization redirect to GitL
       scope: "gitlab:read",
       resource: "https://mcp.example.com/mcp",
     });
-    const redirect = new URL(gateway.beginAuthorization(params));
+    const redirect = new URL(await gateway.beginAuthorization(params));
     assert.equal(redirect.origin, "https://gitlab.com");
     assert.equal(redirect.pathname, "/oauth/authorize");
     assert.equal(redirect.searchParams.get("client_id"), "gitlab-client-id");
@@ -68,14 +72,16 @@ test("DCR client registration and downstream PKCE authorization redirect to GitL
     assert.equal(redirect.searchParams.get("code_challenge_method"), "S256");
     assert.ok(redirect.searchParams.get("state"));
   } finally {
+    await gateway.close();
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("read-only deployment rejects downstream write scope", () => {
+test("read-only deployment rejects downstream write scope", async () => {
   const { dir, gateway } = fixture(false);
   try {
-    const registration = gateway.registerClient({
+    await gateway.init();
+    const registration = await gateway.registerClient({
       redirect_uris: ["https://client.example/oauth/callback"],
       token_endpoint_auth_method: "none",
     });
@@ -87,11 +93,12 @@ test("read-only deployment rejects downstream write scope", () => {
       code_challenge_method: "S256",
       scope: "gitlab:write",
     });
-    assert.throws(
+    await assert.rejects(
       () => gateway.beginAuthorization(params),
       (error: unknown) => error instanceof OAuthProtocolError && error.code === "invalid_scope",
     );
   } finally {
+    await gateway.close();
     rmSync(dir, { recursive: true, force: true });
   }
 });
