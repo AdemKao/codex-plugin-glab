@@ -45,6 +45,19 @@ Completed:
 - pipeline create/retry/cancel tools;
 - Docker Compose PostgreSQL profile and migration documentation.
 
+## v0.5.1 — ChatGPT remote App binding UX
+
+Completed:
+
+- first-class remote ChatGPT binding generator for Issue #8;
+- required `--app-id` + `--mcp-url` workspace binding inputs;
+- public HTTPS `/mcp` URL validation with unsafe target rejection;
+- live ChatGPT MCP doctor for Protected Resource Metadata, Authorization Server Metadata, and unauthenticated `/mcp` OAuth challenge checks;
+- generated `.app.json` and `.chatgpt-setup.json` without modifying the portable source plugin;
+- preserved localhost `.mcp.json` for local Codex;
+- CI coverage for a fake ChatGPT-bound variant and unsafe URL rejection;
+- explicit documentation of the ChatGPT Custom MCP App creation/consent boundary.
+
 ## v0.6 — Policy, observability, and compatibility
 
 Planned candidates:
