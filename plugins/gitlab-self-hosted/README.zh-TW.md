@@ -22,57 +22,83 @@ Project、issue、MR、branch、commit、repository file、pipeline 等結構化
 gitlab-self-hosted
 ```
 
-舊的 `gitlab` identifier 會在平台解析時和 OpenAI curated GitLab plugin 衝突。使用者看到的名稱仍然是 **GitLab Self-Hosted**，但 marketplace、folder 與 `plugin.json.name` 現在都固定為 `gitlab-self-hosted`。
+舊的 `gitlab` identifier 會在平台解析時和 OpenAI curated GitLab plugin 衝突。使用者看到的名稱仍然是 **GitLab Self-Hosted**，但 marketplace、folder 與 `plugin.json.name` 都固定為 `gitlab-self-hosted`。
 
-Portable/local plugin reference：
+Portable reference：
 
 ```text
 gitlab-self-hosted@ademkao-codex-plugins
 ```
 
-Generated personal remote reference：
+Portable package 現在刻意維持 **endpoint-unbound**：不包含 `mcpServers`、不自動載入 `.mcp.json`，也不包含 workspace-specific App binding。
+
+明確產生的 connection variants：
 
 ```text
+gitlab-self-hosted@ademkao-gitlab-local
 gitlab-self-hosted@ademkao-gitlab-remote
+gitlab-self-hosted@ademkao-gitlab-chatgpt
 ```
 
 升級到 v0.5.4 後，不要再用舊的 `gitlab@ademkao-codex-plugins` 代表本 repo 的 plugin。
 
-## Portable marketplace 與 remote plugin variant
+## 明確選擇 MCP connection
 
-Portable source plugin 會保留 `./.mcp.json -> http://127.0.0.1:3333/mcp`，作為同機 Codex 的 local fallback。Repo root marketplace `ademkao-codex-plugins` 安裝的是這份 portable source package。
+### Local Codex
 
-你在 MCP settings 裡另外新增並完成 OAuth 的 remote MCP server，**不會自動取代** ChatGPT plugin packaged 的 localhost dependency。
+Bundled MCP server 與 Codex 跑在同一台機器時，產生 localhost-bound marketplace：
 
-如果你希望 plugin 本身使用 remote MCP，而且不想要 ChatGPT App/connector ID，請產生 personal remote marketplace：
+```bash
+python3 scripts/build_local_variant.py
+```
+
+Import/install generated marketplace 後使用：
+
+```text
+gitlab-self-hosted@ademkao-gitlab-local
+```
+
+只有這個 generated local variant 會加入：
+
+```text
+.mcp.json -> http://127.0.0.1:3333/mcp
+```
+
+### Direct remote MCP
+
+OCI 或其他 self-hosted deployment，直接提供要使用的 public HTTPS endpoint：
 
 ```bash
 python3 scripts/build_personal_variant.py \
   --mcp-url https://gitlab-mcp.example.com/mcp
 ```
 
-Import/install generated marketplace root 後，使用：
+Import/install generated marketplace 後使用：
 
 ```text
 gitlab-self-hosted@ademkao-gitlab-remote
 ```
 
-Generated plugin 會保留 `mcpServers: "./.mcp.json"`，但 copied `.mcp.json` 會指向通過驗證的 remote endpoint。它使用 client 原本的 OAuth flow，也不會修改 portable source package。
+Helper 會驗證 URL，並只把該 URL 寫進 generated artifact；committed portable plugin 仍維持 endpoint-unbound。
 
-如果你需要 ChatGPT App/connector binding，才使用 workspace-specific variant：
+### ChatGPT custom MCP App
 
-1. 建立/連線指向 remote HTTPS `/mcp` 的 ChatGPT App / connector；
-2. 完成該 App / connector 的 OAuth；
-3. 取得既有 App / connector ID；
-4. 用該 ID 與 remote MCP URL 執行 `scripts/build_chatgpt_variant.py`；
-5. import/install generated marketplace root。
+ChatGPT 的 MCP endpoint 應設定在 custom MCP App / connector；portable plugin 不持有、也不修改 App 的 URL。
 
-Generated marketplace 名稱是 `ademkao-gitlab-chatgpt`，因此 generated plugin reference 是：
+App 已建立並完成 OAuth 設定後，再用既有 App / connector ID 產生綁定版本：
+
+```bash
+python3 scripts/build_chatgpt_variant.py \
+  --app-id YOUR_EXISTING_WORKSPACE_APP_OR_CONNECTOR_ID \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+Import/install generated marketplace 後使用：
 
 ```text
 gitlab-self-hosted@ademkao-gitlab-chatgpt
 ```
 
-Generated plugin 使用 `apps: "./.app.json"`，而且不包含 `mcpServers` 與 `.mcp.json`，避免 localhost fallback 和 remote App binding 競爭。
+Generated ChatGPT plugin 使用 `apps: "./.app.json"`，而且不包含 `mcpServers` 與 `.mcp.json`。`--mcp-url` 會被驗證並記錄為該 App 預期已設定的 endpoint；真正的 plugin binding 是 App / connector ID。
 
 完整設定、migration 與 troubleshooting 請看 `docs/chatgpt-app.zh-TW.md`。

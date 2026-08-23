@@ -4,9 +4,9 @@
 This repository helper binds an already-created ChatGPT workspace app/connector
 ID into a copied plugin variant. It is not an OpenAI managed App Template.
 
-The portable source plugin remains unchanged and keeps the localhost MCP fallback
-for local Codex use. The generated artifact is a standalone marketplace source
-whose plugin copy is App-bound and has the localhost MCP dependency removed.
+The portable source plugin is intentionally endpoint-unbound. The generated
+artifact is a standalone marketplace source whose plugin copy is App-bound and
+contains no direct MCP server definition.
 
 The package identifier is intentionally `gitlab-self-hosted`, not `gitlab`, to
 avoid collision with OpenAI's curated GitLab plugin. Generating the artifact does
@@ -83,7 +83,7 @@ ChatGPT workspace/App binding.
 
 - Marketplace: `{GENERATED_MARKETPLACE_NAME}`
 - Plugin reference: `{PLUGIN_ID}@{GENERATED_MARKETPLACE_NAME}`
-- Remote MCP endpoint: `{mcp_url}`
+- Remote MCP endpoint configured on the App: `{mcp_url}`
 - Workspace App/connector ID: `{app_id}`
 
 ## Important
@@ -96,8 +96,9 @@ The portable v0.5.4+ package reference is:
 
 `{PLUGIN_ID}@ademkao-codex-plugins`
 
-To use the remote App binding, make this generated directory the marketplace
-source that the target client/workspace actually imports or installs, then use:
+The portable package is endpoint-unbound. To use a remote ChatGPT MCP endpoint,
+create/configure the custom MCP App first, then make this generated directory the
+marketplace source that the target client/workspace actually imports or installs:
 
 `{PLUGIN_ID}@{GENERATED_MARKETPLACE_NAME}`
 
@@ -151,8 +152,9 @@ def build(app_id: str, mcp_url: str, output: Path, force: bool) -> None:
     manifest = load_json(manifest_path, "plugin manifest")
     if manifest.get("name") != PLUGIN_ID:
         fail(f"source plugin manifest name must be '{PLUGIN_ID}'")
+    if "mcpServers" in manifest or "apps" in manifest:
+        fail("portable plugin manifest must be endpoint-unbound")
     manifest["apps"] = "./.app.json"
-    manifest.pop("mcpServers", None)
     write_json(manifest_path, manifest)
 
     generated_mcp = generated_plugin / ".mcp.json"
@@ -175,7 +177,8 @@ def build(app_id: str, mcp_url: str, output: Path, force: bool) -> None:
         "requires_explicit_chatgpt_app_creation": True,
         "requires_marketplace_import_or_install": True,
         "does_not_modify_existing_installation": True,
-        "source_local_mcp_removed": True,
+        "source_portable_unbound": True,
+        "endpoint_configured_on_app": True,
         "doctor_command": f"python3 scripts/chatgpt_mcp_doctor.py --mcp-url {mcp_url}",
     }
     write_json(generated_plugin / ".chatgpt-setup.json", setup)
@@ -200,9 +203,9 @@ def build(app_id: str, mcp_url: str, output: Path, force: bool) -> None:
 
     print(f"Built workspace-specific GitLab Self-Hosted marketplace source: {output}")
     print(f"Plugin reference: {PLUGIN_ID}@{GENERATED_MARKETPLACE_NAME}")
-    print(f"Remote MCP URL: {mcp_url}")
-    print("The portable repository marketplace and localhost Codex MCP configuration were not modified.")
-    print("The generated marketplace selects an App-bound plugin with no packaged localhost MCP dependency.")
+    print(f"Remote MCP URL configured on App: {mcp_url}")
+    print("The portable repository marketplace remains endpoint-unbound.")
+    print("The generated marketplace selects an App-bound plugin with no direct MCP dependency.")
     print("The target workspace app/connector must already exist and point to the remote MCP server.")
     print("Generating this artifact does not replace an already-installed plugin; import/install this marketplace source explicitly.")
     print("This helper is not an OpenAI managed App Template.")
@@ -225,7 +228,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mcp-url",
         required=True,
-        help="remote HTTPS /mcp endpoint associated with that app/connector",
+        help="remote HTTPS /mcp endpoint already configured on that app/connector",
     )
     parser.add_argument(
         "--output",
