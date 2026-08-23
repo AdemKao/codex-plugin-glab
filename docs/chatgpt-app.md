@@ -2,7 +2,7 @@
 
 [English](chatgpt-app.md) | [繁體中文](chatgpt-app.zh-TW.md)
 
-For v0.4, the recommended multi-user ChatGPT path is the bundled MCP server in **per-user OAuth mode**. ChatGPT connects to your HTTPS `/mcp` endpoint; each user then authorizes their own GitLab account through the server's OAuth flow.
+For multi-user ChatGPT access, deploy the bundled MCP server in **per-user OAuth mode**. Each user authorizes their own GitLab identity; ChatGPT receives MCP credentials, not a GitLab PAT.
 
 ## Flow
 
@@ -10,6 +10,7 @@ For v0.4, the recommended multi-user ChatGPT path is the bundled MCP server in *
 ChatGPT Custom MCP App
         |
         | HTTPS / MCP + OAuth discovery
+        | CIMD when supported, DCR fallback
         v
 https://gitlab-mcp.example.com/mcp
         |
@@ -20,21 +21,23 @@ GitLab OAuth
         | per-user GitLab token
         v
 GitLab REST API v4
+
+OAuth sessions
+  one replica -> encrypted file
+  many replicas -> PostgreSQL
 ```
 
 ## 1. Create a GitLab OAuth Application
 
-Create one OAuth Application on the GitLab instance you want the MCP server to use.
-
-Callback URI:
+Create one OAuth Application on the target GitLab instance with callback:
 
 ```text
 https://gitlab-mcp.example.com/oauth/gitlab/callback
 ```
 
-Keep the Application ID and secret in your deployment secret manager. Do not put them in the plugin package or ChatGPT prompt.
+Keep the Application ID/secret and `OAUTH_ENCRYPTION_KEY` in deployment secrets, not the plugin or prompts.
 
-## 2. Deploy the MCP server in OAuth mode
+## 2. Deploy OAuth mode
 
 ```bash
 MCP_AUTH_MODE=oauth
@@ -44,46 +47,56 @@ GITLAB_HOST=https://gitlab.com
 GITLAB_OAUTH_CLIENT_ID=...
 GITLAB_OAUTH_CLIENT_SECRET=...
 OAUTH_ENCRYPTION_KEY="$(openssl rand -base64 32)"
-OAUTH_STORE_PATH=/data/oauth-store.json
 
 GITLAB_WRITE_ENABLED=false
 GITLAB_MERGE_ENABLED=false
 ```
 
-Deploy behind HTTPS. The public origin in `PUBLIC_BASE_URL` must be the same origin users and MCP clients can reach.
+Single replica:
 
-The root Docker Compose file persists `/data` for the encrypted OAuth store. Protect the encryption key separately from the volume.
+```bash
+OAUTH_STORE_DRIVER=file
+OAUTH_STORE_PATH=/data/oauth-store.json
+```
 
-## 3. Verify OAuth discovery before adding ChatGPT
+Production / multi-replica:
 
-Useful checks:
+```bash
+OAUTH_STORE_DRIVER=postgres
+OAUTH_DATABASE_URL=postgresql://user:password@db:5432/codex_glab
+```
+
+The PostgreSQL backend gives atomic one-time authorization state/code consumption and refresh-token rotation across replicas.
+
+## 3. Verify OAuth discovery
+
+Check:
 
 ```text
 GET https://gitlab-mcp.example.com/.well-known/oauth-protected-resource
 GET https://gitlab-mcp.example.com/.well-known/oauth-authorization-server
 ```
 
-An unauthenticated request to:
+The authorization metadata should advertise:
 
-```text
-https://gitlab-mcp.example.com/mcp
+```json
+"client_id_metadata_document_supported": true
 ```
 
-should return `401` and a `WWW-Authenticate` header containing `resource_metadata=...`.
+when CIMD is enabled. DCR remains available at `/oauth/register` when `OAUTH_DCR_ENABLED=true`.
 
-Do not consider the deployment ready if `/mcp` accepts anonymous requests in OAuth mode.
+An unauthenticated `/mcp` request must return `401` with `WWW-Authenticate` pointing to Protected Resource Metadata.
 
-## 4. Create the ChatGPT Custom MCP App
+## 4. Connect ChatGPT
 
-In a ChatGPT workspace/surface that currently supports the required custom MCP capability:
+In a ChatGPT workspace/surface that supports Custom MCP Apps:
 
-1. Enable Developer Mode if required.
-2. Create a Custom MCP App.
-3. Enter `https://gitlab-mcp.example.com/mcp`.
-4. Scan/discover tools.
-5. Start the authentication flow when prompted.
-6. Authorize the GitLab account in the GitLab browser consent screen.
-7. Return to ChatGPT and verify a harmless read operation first.
+1. enable Developer Mode if required;
+2. create a Custom MCP App;
+3. enter `https://gitlab-mcp.example.com/mcp`;
+4. let the client discover tools and OAuth;
+5. complete GitLab browser authorization;
+6. verify a harmless read first.
 
 Smoke test:
 
@@ -91,55 +104,39 @@ Smoke test:
 List the GitLab groups and projects I can access.
 ```
 
-The MCP tools should execute with the GitLab identity that completed OAuth, not a shared server token.
+The result must reflect the GitLab account that completed OAuth.
 
-## Read vs write authorization
+## CIMD / DCR
 
-The deployment is read-only by default.
+v0.5 prefers CIMD for MCP clients that support URL-based client metadata. The server validates the metadata document and blocks private-network SSRF targets by default. DCR is retained for compatibility with clients that still require dynamic registration.
 
-For a read-only ChatGPT integration:
+## Read vs write
+
+Read-only deployment:
 
 ```bash
 GITLAB_WRITE_ENABLED=false
 GITLAB_MERGE_ENABLED=false
 ```
 
-The OAuth flow exposes only `gitlab:read`.
-
-To permit selected write tools:
+To enable write tools:
 
 ```bash
 GITLAB_WRITE_ENABLED=true
 ```
 
-The user must also authorize `gitlab:write`. Merge still remains disabled until:
+The user must also authorize `gitlab:write`. MR merge remains disabled until `GITLAB_MERGE_ENABLED=true`.
 
-```bash
-GITLAB_MERGE_ENABLED=true
-```
-
-OAuth scope, server policy, project allowlist, and the GitLab user's actual GitLab permission all have to permit the action.
+OAuth scope, deployment policy, project allowlist, and GitLab permission all have to allow the action.
 
 ## What ChatGPT does not receive
 
-With per-user OAuth, ChatGPT/MCP clients receive MCP access and refresh tokens issued by this MCP server. The client does **not** need the deployment's GitLab OAuth application secret, `OAUTH_ENCRYPTION_KEY`, or a raw PAT.
-
-The user's GitLab OAuth access/refresh tokens are kept in the encrypted server-side OAuth store.
+ChatGPT/MCP clients do not need the GitLab OAuth Application secret, `OAUTH_ENCRYPTION_KEY`, the PostgreSQL credentials, or a raw PAT. GitLab OAuth access/refresh tokens stay encrypted in the server-side store.
 
 ## Shared-token fallback
 
-For a personal/trusted single-user environment, `MCP_AUTH_MODE=shared-token` remains supported. It uses one GitLab token for the deployment and may use `MCP_AUTH_TOKEN` to protect the MCP endpoint.
+`MCP_AUTH_MODE=shared-token` remains available for personal/trusted environments. Do not use it as a substitute for per-user authorization in an untrusted multi-user workspace.
 
-Do not use shared-token mode as a substitute for per-user authorization in an untrusted multi-user ChatGPT workspace.
+## Product support
 
-## Current storage limitation
-
-v0.4's built-in OAuth store is single-node/file-based. Use one writable MCP server instance for a given store. Do not mount the same OAuth store file into several replicas without an external locking/transactional backend.
-
-## ChatGPT plan and surface support
-
-OpenAI controls which plans, workspace roles, and ChatGPT surfaces can create or use Custom MCP Apps and write-capable MCP tools. Those rules can change independently of this repository, so verify current OpenAI documentation when deploying.
-
-## Plugin packaging
-
-`scripts/build_chatgpt_variant.py` remains available for workspace-specific plugin/app packaging where applicable. The GitLab data and OAuth path is the self-hosted MCP server.
+OpenAI controls which plans, workspace roles, and ChatGPT surfaces can create/use Custom MCP Apps and write-capable MCP tools. Verify current OpenAI documentation when deploying because those capabilities can change independently of this repo.
