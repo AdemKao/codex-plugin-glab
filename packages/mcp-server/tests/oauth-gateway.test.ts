@@ -22,6 +22,18 @@ function fixture(writeEnabled = false) {
   return { dir, gateway: new OAuthGateway(config) };
 }
 
+function authorizationParams(clientId: string, redirectUri: string): URLSearchParams {
+  return new URLSearchParams({
+    response_type: "code",
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    code_challenge: pkceChallenge(randomToken(48)),
+    code_challenge_method: "S256",
+    scope: "gitlab:read",
+    resource: "https://mcp.example.com/mcp",
+  });
+}
+
 test("publishes MCP protected-resource and authorization-server metadata", async () => {
   const { dir, gateway } = fixture();
   try {
@@ -71,6 +83,107 @@ test("DCR client registration and downstream PKCE authorization redirect to GitL
     assert.equal(redirect.searchParams.get("scope"), "read_api read_user");
     assert.equal(redirect.searchParams.get("code_challenge_method"), "S256");
     assert.ok(redirect.searchParams.get("state"));
+  } finally {
+    await gateway.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("IPv4 loopback redirect registration matches a dynamic client port", async () => {
+  const { dir, gateway } = fixture();
+  try {
+    await gateway.init();
+    const registration = await gateway.registerClient({
+      redirect_uris: ["http://127.0.0.1/callback/native-client"],
+      token_endpoint_auth_method: "none",
+    });
+    const redirect = new URL(await gateway.beginAuthorization(authorizationParams(
+      String(registration.client_id),
+      "http://127.0.0.1:62593/callback/native-client",
+    )));
+    assert.equal(redirect.origin, "https://gitlab.com");
+  } finally {
+    await gateway.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("localhost redirect registration matches a dynamic client port", async () => {
+  const { dir, gateway } = fixture();
+  try {
+    await gateway.init();
+    const registration = await gateway.registerClient({
+      redirect_uris: ["http://localhost/callback/native-client"],
+      token_endpoint_auth_method: "none",
+    });
+    const redirect = new URL(await gateway.beginAuthorization(authorizationParams(
+      String(registration.client_id),
+      "http://localhost:54321/callback/native-client",
+    )));
+    assert.equal(redirect.origin, "https://gitlab.com");
+  } finally {
+    await gateway.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("dynamic loopback matching remains limited to the registered host and path", async () => {
+  const { dir, gateway } = fixture();
+  try {
+    await gateway.init();
+    const registration = await gateway.registerClient({
+      redirect_uris: ["http://127.0.0.1/callback/native-client"],
+      token_endpoint_auth_method: "none",
+    });
+    const clientId = String(registration.client_id);
+    for (const redirectUri of [
+      "http://localhost:62593/callback/native-client",
+      "http://127.0.0.1:62593/callback/other",
+      "http://127.0.0.1:62593/callback/native-client?unexpected=1",
+      "http://user@127.0.0.1:62593/callback/native-client",
+      "http://127.0.0.1:62593/callback/native-client#fragment",
+    ]) {
+      await assert.rejects(
+        () => gateway.beginAuthorization(authorizationParams(clientId, redirectUri)),
+        (error: unknown) =>
+          error instanceof OAuthProtocolError &&
+          error.code === "invalid_request" &&
+          /redirect_uri is not registered/.test(error.message),
+      );
+    }
+  } finally {
+    await gateway.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("public redirect URIs and explicitly registered loopback ports stay exact", async () => {
+  const { dir, gateway } = fixture();
+  try {
+    await gateway.init();
+    const publicRegistration = await gateway.registerClient({
+      redirect_uris: ["https://client.example/oauth/callback"],
+      token_endpoint_auth_method: "none",
+    });
+    await assert.rejects(
+      () => gateway.beginAuthorization(authorizationParams(
+        String(publicRegistration.client_id),
+        "https://client.example:62593/oauth/callback",
+      )),
+      (error: unknown) => error instanceof OAuthProtocolError && error.code === "invalid_request",
+    );
+
+    const fixedLoopbackRegistration = await gateway.registerClient({
+      redirect_uris: ["http://127.0.0.1:4000/callback/native-client"],
+      token_endpoint_auth_method: "none",
+    });
+    await assert.rejects(
+      () => gateway.beginAuthorization(authorizationParams(
+        String(fixedLoopbackRegistration.client_id),
+        "http://127.0.0.1:4001/callback/native-client",
+      )),
+      (error: unknown) => error instanceof OAuthProtocolError && error.code === "invalid_request",
+    );
   } finally {
     await gateway.close();
     rmSync(dir, { recursive: true, force: true });
