@@ -5,10 +5,10 @@
   },
   "plugins": [
     {
-      "name": "gitlab",
+      "name": "gitlab-self-hosted",
       "source": {
         "source": "local",
-        "path": "./plugins/gitlab"
+        "path": "./plugins/gitlab-self-hosted"
       },
       "policy": {
         "installation": "AVAILABLE",
