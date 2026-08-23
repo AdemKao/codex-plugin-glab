@@ -1,11 +1,11 @@
 {
   "name": "@codex-plugin-glab/mcp-server",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
-  "description": "Self-hosted GitLab MCP server with shared-token and per-user OAuth modes for ChatGPT, Codex, and other MCP clients.",
+  "description": "Production-oriented self-hosted GitLab MCP server with per-user OAuth, CIMD, and multi-replica PostgreSQL sessions.",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -17,10 +17,12 @@
   "dependencies": {
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
+    "pg": "^8.16.3",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.5",
     "tsx": "^4.20.0",
     "typescript": "7.0.2"
   }
