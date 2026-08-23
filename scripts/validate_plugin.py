@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "gitlab"
 MANIFEST = PLUGIN / ".codex-plugin" / "plugin.json"
 MCP = PLUGIN / ".mcp.json"
-APP_TEMPLATE = PLUGIN / "app-template" / ".app.json.example"
+WORKSPACE_BINDING_EXAMPLE = PLUGIN / "workspace-binding" / ".app.json.example"
+LEGACY_APP_TEMPLATE_DIR = PLUGIN / "app-template"
 BUILDER = ROOT / "scripts" / "build_chatgpt_variant.py"
 DOCTOR = ROOT / "scripts" / "chatgpt_mcp_doctor.py"
 BINDING_HELPERS = ROOT / "scripts" / "chatgpt_binding.py"
@@ -159,14 +160,16 @@ def validate_mcp_package() -> None:
             fail(f"missing MCP server file: {path.relative_to(ROOT)}")
 
 
-def validate_app_template() -> None:
-    template = load_json(APP_TEMPLATE)
-    app_id = template.get("apps", {}).get("gitlab", {}).get("id")
+def validate_workspace_binding_helper() -> None:
+    binding = load_json(WORKSPACE_BINDING_EXAMPLE)
+    app_id = binding.get("apps", {}).get("gitlab", {}).get("id")
     if app_id != APP_PLACEHOLDER:
-        fail("app template must contain the documented GitLab app/connector placeholder")
+        fail("workspace binding example must contain the documented GitLab app/connector placeholder")
+    if LEGACY_APP_TEMPLATE_DIR.exists():
+        fail("legacy app-template directory must not exist; this repository ships a workspace binding helper, not an OpenAI App Template")
     for path in (BUILDER, DOCTOR, BINDING_HELPERS):
         if not path.is_file():
-            fail(f"missing ChatGPT binding tool: {path.relative_to(ROOT)}")
+            fail(f"missing ChatGPT workspace binding tool: {path.relative_to(ROOT)}")
 
 
 def validate_generated_variant() -> None:
@@ -178,7 +181,7 @@ def validate_generated_variant() -> None:
             cwd=ROOT, text=True, capture_output=True, check=False,
         )
         if result.returncode != 0:
-            fail(f"ChatGPT variant builder failed: {result.stderr.strip()}")
+            fail(f"ChatGPT workspace binding helper failed: {result.stderr.strip()}")
 
         generated_app = load_json_external(output / ".app.json")
         generated_manifest = load_json_external(output / ".codex-plugin" / "plugin.json")
@@ -187,12 +190,18 @@ def validate_generated_variant() -> None:
             fail("generated .app.json does not contain requested app ID")
         if generated_manifest.get("apps") != "./.app.json":
             fail("generated plugin manifest does not bind ./.app.json")
+        if generated_setup.get("profile") != "workspace-binding-helper":
+            fail("generated ChatGPT setup must identify the workspace binding helper profile")
         if generated_setup.get("mcp_url") != TEST_REMOTE_MCP:
             fail("generated ChatGPT setup metadata does not contain requested MCP URL")
+        if generated_setup.get("requires_existing_workspace_app_or_connector") is not True:
+            fail("generated ChatGPT setup must require an existing workspace App/connector")
         if generated_setup.get("requires_explicit_chatgpt_app_creation") is not True:
             fail("generated ChatGPT setup must preserve explicit platform consent boundary")
-        if (output / "app-template").exists():
-            fail("generated plugin should not include the source app-template directory")
+        if generated_setup.get("managed_workspace_app_template") != "not-generated-by-this-repository":
+            fail("generated ChatGPT setup must not claim to generate a managed workspace App Template")
+        if (output / "workspace-binding").exists():
+            fail("generated plugin should not include the source workspace-binding helper directory")
 
     rejected_urls = [
         "http://gitlab-mcp.example.com/mcp",
@@ -210,7 +219,7 @@ def validate_generated_variant() -> None:
                 cwd=ROOT, text=True, capture_output=True, check=False,
             )
             if result.returncode == 0:
-                fail(f"ChatGPT variant builder accepted unsafe MCP URL: {bad_url}")
+                fail(f"ChatGPT workspace binding helper accepted unsafe MCP URL: {bad_url}")
 
 
 def validate_marketplace() -> None:
@@ -268,7 +277,7 @@ def main() -> None:
     validate_manifest()
     validate_mcp()
     validate_mcp_package()
-    validate_app_template()
+    validate_workspace_binding_helper()
     validate_generated_variant()
     validate_marketplace()
     validate_skills()
