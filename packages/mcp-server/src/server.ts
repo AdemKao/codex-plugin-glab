@@ -8,6 +8,7 @@ import { runWithRequestAuth } from "./auth-context.js";
 import { loadConfig } from "./config.js";
 import { OAuthGateway, OAuthProtocolError } from "./oauth-gateway.js";
 import { registerGitLabTools } from "./register-tools.js";
+import { registerGitLabV05Tools } from "./register-v05-tools.js";
 
 const VERSION = "0.5.0";
 const config = loadConfig();
@@ -19,7 +20,10 @@ function createGitLabServer(): McpServer {
     { name: "codex-plugin-glab", version: VERSION },
     { capabilities: { tools: {} } },
   );
+  const gitlabClient = undefined;
   registerGitLabTools(server, config);
+  // v0.5 tools share the same request-scoped auth context as the core registry.
+  registerGitLabV05Tools(server, config, new (await import("./gitlab-client.js")).GitLabClient(config));
   return server;
 }
 
