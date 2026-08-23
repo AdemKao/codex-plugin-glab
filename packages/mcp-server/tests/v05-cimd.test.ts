@@ -35,17 +35,19 @@ test("authorization metadata advertises CIMD and keeps DCR fallback", async () =
   }
 });
 
-test("CIMD URL client resolves metadata and starts authorization", async () => {
+test("CIMD accepts a ChatGPT-style loopback callback with a dynamic port", async () => {
   const dir = mkdtempSync(join(tmpdir(), "glab-v05-cimd-flow-"));
   const clientId = "https://127.0.0.1/client-metadata.json";
+  const registeredRedirect = "http://127.0.0.1/callback/chatgpt-client";
+  const requestedRedirect = "http://127.0.0.1:62593/callback/chatgpt-client";
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     assert.equal(url, clientId);
     return new Response(JSON.stringify({
       client_id: clientId,
-      client_name: "CIMD Test Client",
-      redirect_uris: ["https://client.example/callback"],
+      client_name: "ChatGPT CIMD Test Client",
+      redirect_uris: [registeredRedirect, "http://localhost/callback/chatgpt-client"],
       token_endpoint_auth_method: "none",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
@@ -66,13 +68,18 @@ test("CIMD URL client resolves metadata and starts authorization", async () => {
     const redirect = new URL(await gateway.beginAuthorization(new URLSearchParams({
       response_type: "code",
       client_id: clientId,
-      redirect_uri: "https://client.example/callback",
+      redirect_uri: requestedRedirect,
       code_challenge: pkceChallenge(randomToken(48)),
       code_challenge_method: "S256",
       scope: "gitlab:read",
     })));
     assert.equal(redirect.origin, "https://gitlab.com");
     assert.equal(redirect.pathname, "/oauth/authorize");
+
+    const state = redirect.searchParams.get("state");
+    assert.ok(state);
+    const transaction = await gateway.store.takeTransaction(state);
+    assert.equal(transaction?.redirectUri, requestedRedirect);
   } finally {
     await gateway.close();
     globalThis.fetch = originalFetch;
