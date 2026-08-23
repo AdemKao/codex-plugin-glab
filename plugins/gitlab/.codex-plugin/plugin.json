@@ -1,6 +1,6 @@
 {
   "name": "gitlab",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Inspect and operate GitLab projects through the bundled production-oriented MCP server with safe shared-token or per-user OAuth workflows for Codex and ChatGPT.",
   "author": {
     "name": "AdemKao",
@@ -27,7 +27,7 @@
   "interface": {
     "displayName": "GitLab",
     "shortDescription": "Production GitLab MCP with OAuth and CIMD",
-    "longDescription": "Use the bundled GitLab MCP server to inspect projects, review merge requests, manage issues, operate repository files and pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed. Deploy with a shared service token for trusted single-user use or per-user OAuth with CIMD/DCR support and an optional PostgreSQL store for multi-replica deployments.",
+    "longDescription": "Use the bundled GitLab MCP server to inspect projects, review merge requests, manage issues, operate repository files and pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed. Personal/Codex users can add a remote Streamable HTTP /mcp server and complete OAuth discovery directly; the bundled localhost .mcp.json remains a local fallback. Deploy with a shared service token for trusted single-user use or per-user OAuth with CIMD/DCR support and an optional PostgreSQL store for multi-replica deployments.",
     "developerName": "AdemKao",
     "category": "Developer Tools",
     "capabilities": [
