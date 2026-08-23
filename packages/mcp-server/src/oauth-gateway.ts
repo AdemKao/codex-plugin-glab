@@ -1,3 +1,4 @@
+import type { LookupAddress } from "node:dns";
 import { lookup } from "node:dns/promises";
 import type { IncomingHttpHeaders } from "node:http";
 import { isIP } from "node:net";
@@ -411,7 +412,7 @@ export class OAuthGateway {
         throw new OAuthProtocolError("unauthorized_client", "CIMD private-network targets are blocked", 401);
       }
       if (!isIP(host)) {
-        let addresses: Awaited<ReturnType<typeof lookup>>;
+        let addresses: LookupAddress[];
         try {
           addresses = await lookup(host, { all: true, verbatim: true });
         } catch {
