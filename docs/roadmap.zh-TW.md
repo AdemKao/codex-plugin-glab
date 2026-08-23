@@ -45,18 +45,29 @@
 - pipeline create/retry/cancel tools；
 - Docker Compose PostgreSQL profile 與 migration 文件。
 
-## v0.5.1 — ChatGPT remote App binding UX
+## v0.5.1 — Initial ChatGPT remote binding UX
 
 已完成：
 
-- Issue #8 的 first-class remote ChatGPT binding generator；
-- workspace binding 必須提供 `--app-id` + `--mcp-url`；
-- public HTTPS `/mcp` URL validation 與 unsafe target rejection；
-- live ChatGPT MCP doctor，驗證 Protected Resource Metadata、Authorization Server Metadata 與未登入 `/mcp` OAuth challenge；
-- 產生 `.app.json` 與 `.chatgpt-setup.json`，不修改 portable source plugin；
+- remote OAuth MCP URL validator 與 live doctor；
+- 針對已存在 App/connector 的 workspace-specific `.app.json` binding generation；
 - 保留 local Codex 使用的 localhost `.mcp.json`；
-- CI 建立 fake ChatGPT-bound variant 並驗證 unsafe URL rejection；
-- 文件明確說明 ChatGPT Custom MCP App creation / consent boundary。
+- generated binding 與 unsafe URL rejection 的 CI coverage；
+- 明確的 platform consent boundary 文件。
+
+## v0.5.2 — Codex remote MCP / OAuth installation UX
+
+已完成：
+
+- Personal/Codex remote self-host 安裝明確改為 **Add server -> remote HTTPS `/mcp` -> OAuth discovery**；
+- `plugins/gitlab/.mcp.json` 維持 localhost local fallback，不再拿來承擔 remote deployment 設定；
+- `plugins/gitlab/workspace-binding/.app.json.example` 與 `scripts/build_chatgpt_variant.py` 明確定位為「既有 App/connector 的 workspace binding helper」；
+- 移除容易誤導的 `app-template/` source path，validator 會防止此語意回歸；
+- generated binding metadata 明確要求 workspace App/connector 必須已存在，並標示本 repo 不會產生 OpenAI managed workspace App Template；
+- managed workspace App Template / provisioning 改成獨立的 platform/admin 路徑說明；
+- remote MCP doctor 語意改成 Codex/ChatGPT 都可用的 OAuth deployment validation；
+- README、繁中、ChatGPT docs、setup skill、capability matrix、roadmap、CHANGELOG 同步成相同安裝模型；
+- plugin、MCP package、runtime、tooling user agent 與 release version 同步為 `0.5.2`。
 
 ## v0.6 — Policy、observability、compatibility
 
