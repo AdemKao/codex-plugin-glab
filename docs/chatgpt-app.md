@@ -2,126 +2,100 @@
 
 [English](chatgpt-app.md) | [繁體中文](chatgpt-app.zh-TW.md)
 
-For self-hosted GitLab access, deploy the bundled MCP server behind HTTPS. In per-user OAuth mode, each user authorizes their own GitLab identity; the MCP client receives MCP credentials rather than a GitLab PAT.
+## Goal
 
-## Package identity
+Use one public plugin repository without exposing a maintainer-specific MCP deployment and without requiring users to run the MCP server locally.
 
-Starting with v0.5.4, this repository uses the third-party plugin identifier:
-
-```text
-gitlab-self-hosted
-```
-
-Do not use `gitlab@ademkao-codex-plugins`; the generic `gitlab` identifier can resolve to OpenAI's curated GitLab plugin.
-
-The portable reference is:
+The default package is:
 
 ```text
 gitlab-self-hosted@ademkao-codex-plugins
 ```
 
-The portable package is intentionally **endpoint-unbound**. It contains workflow skills and metadata, but no `mcpServers`, no automatically loaded `.mcp.json`, and no user/workspace-specific ChatGPT MCP connection binding.
+It is intentionally endpoint-neutral. The real remote MCP URL belongs to the user or workspace configuration, not to the public Git repository.
 
-Explicit generated references are:
+## Normal remote path
 
-```text
-gitlab-self-hosted@ademkao-gitlab-local
-gitlab-self-hosted@ademkao-gitlab-remote
-gitlab-self-hosted@ademkao-gitlab-chatgpt
-```
-
-## The important distinction
-
-Keep these layers separate:
-
-1. **Portable plugin** — workflow skills/metadata only; it does not select an MCP endpoint.
-2. **Codex/native MCP connection** — add a local or remote MCP server directly, or generate an explicit local/remote plugin variant.
-3. **ChatGPT MCP App/connection** — owns the remote MCP endpoint and OAuth session.
-4. **ChatGPT connection-bound plugin variant** — binds the plugin to the platform-generated technical ID of that existing MCP connection through `.app.json`.
-
-Installing the repository plugin and authenticating a remote MCP connection are separate operations. A visible `@GitLab Self-Hosted` plugin does **not** automatically discover or attach a user-specific MCP connection.
-
-## Which setup path should I use?
-
-### Codex / native MCP: direct remote server
+For a client that supports adding a custom remote MCP server directly:
 
 ```text
-Codex / native MCP client
-  -> Add server
-  -> Streamable HTTP
-  -> https://gitlab-mcp.example.com/mcp
-  -> OAuth discovery
-  -> GitLab OAuth
-  -> GitLab REST API v4
+Install repository marketplace root
+        |
+        v
+GitLab Self-Hosted skills
+        +
+User/workspace MCP setting
+  https://gitlab-mcp.example.com/mcp
+        |
+        v
+MCP OAuth discovery
+        |
+        v
+GitLab OAuth
+        |
+        v
+GitLab REST API v4
 ```
 
-This path does not require `.app.json` or a generated ChatGPT plugin variant.
+Setup:
 
-### Explicit local Codex variant
+1. Install the repository root marketplace.
+2. Add the user's or workspace's public remote HTTPS `/mcp` endpoint in the client MCP/App settings.
+3. Complete OAuth.
+4. Refresh/scan tools when the client offers that action.
+5. Verify a harmless read before enabling writes.
 
-If the bundled MCP server runs on the same machine as Codex:
+No local MCP process, generated remote marketplace, or second repository is required for this direct-MCP path.
 
-```bash
-python3 scripts/build_local_variant.py
-```
+## Why the endpoint is not embedded in the plugin
 
-Import/install the generated marketplace and use:
+Agent Plugin HTTP MCP configuration requires a literal absolute URL. The current format does not treat arbitrary `${ENV_VAR}` text in the HTTP `url` field as install-time endpoint substitution.
+
+That creates an important invariant:
+
+- a committed active `.mcp.json` can point to one concrete URL; or
+- the public package can remain endpoint-neutral so each user/workspace configures its own URL.
+
+This project chooses the second option. It avoids publishing an operator's private infrastructure and avoids silently sending other users to a maintainer-controlled server.
+
+A neutral reference is included at:
 
 ```text
-gitlab-self-hosted@ademkao-gitlab-local
+plugins/gitlab-self-hosted/workspace-binding/.mcp.remote.json.example
 ```
 
-Only that generated artifact contains:
+It intentionally uses:
 
 ```text
-.mcp.json -> http://127.0.0.1:3333/mcp
+https://gitlab-mcp.example.com/mcp
 ```
 
-### Explicit remote MCP plugin variant
+Do not replace that committed example with a real organization endpoint.
 
-If the plugin reference itself should load a user-selected remote MCP server:
+## Important ChatGPT app-binding distinction
 
-```bash
-python3 scripts/build_personal_variant.py \
-  --mcp-url https://gitlab-mcp.example.com/mcp
-```
+ChatGPT plugins can package skills and can depend on apps. A plugin package and a connected/authenticated MCP App are separate objects.
 
-Import/install the generated marketplace and use:
+When a ChatGPT surface exposes a user-configured MCP App directly to the conversation, the endpoint-neutral workflow can use that connection without generating another repository variant.
 
-```text
-gitlab-self-hosted@ademkao-gitlab-remote
-```
+When a ChatGPT surface requires the plugin itself to declare an app dependency, a static public plugin cannot dynamically discover the technical ID of an arbitrary user-created connection. There are two platform-level ways to make such a dependency portable:
 
-The helper validates the public HTTPS `/mcp` endpoint and writes it only into the generated artifact. It does not edit the committed portable plugin.
+- a canonical shared app/connector ID that is portable across workspaces; or
+- a managed App Template that creates a workspace-specific app and is supported by the target managed workspace.
 
-### ChatGPT: existing MCP connection + connection-bound plugin
+This repository currently has neither a canonical OpenAI-managed GitLab Self-Hosted app ID nor an OpenAI-managed App Template. It therefore does not pretend that a placeholder connection ID or `${GITLAB_MCP_URL}` can provide one-click binding for every workspace.
 
-```text
-ChatGPT MCP App/connection
-  -> configured endpoint: https://gitlab-mcp.example.com/mcp
-  -> OAuth
-  -> scanned GitLab tools
-  -> platform-generated technical ID
+The legacy `build_chatgpt_variant.py` helper remains available only when a workspace already has a connection technical ID and explicitly needs a plugin-bound artifact. It is compatibility tooling, not the normal remote setup.
 
-GitLab Self-Hosted plugin
-  -> gitlab-self-hosted@ademkao-gitlab-chatgpt
-  -> .app.json
-  -> existing MCP connection technical ID
-```
+## Deploy the bundled OAuth MCP server
 
-The generated plugin contains `apps: "./.app.json"` but no direct MCP server definition.
-
-## 1. Create a GitLab OAuth Application
-
-Create one OAuth Application on the target GitLab instance with callback:
+Create a GitLab OAuth Application on the intended GitLab instance. Use your own public hostname for the callback, for example:
 
 ```text
 https://gitlab-mcp.example.com/oauth/gitlab/callback
 ```
 
-Keep the Application ID/secret and `OAUTH_ENCRYPTION_KEY` in deployment secrets, not the plugin or prompts.
-
-## 2. Deploy OAuth mode
+Environment example:
 
 ```bash
 MCP_AUTH_MODE=oauth
@@ -143,157 +117,83 @@ OAUTH_STORE_DRIVER=file
 OAUTH_STORE_PATH=/data/oauth-store.json
 ```
 
-Production / multi-replica:
+Multi-replica production:
 
 ```bash
 OAUTH_STORE_DRIVER=postgres
 OAUTH_DATABASE_URL=postgresql://user:password@db:5432/codex_glab
 ```
 
-## 3. Validate the remote endpoint
+## Validate the remote endpoint
 
 ```bash
 python3 scripts/chatgpt_mcp_doctor.py \
   --mcp-url https://gitlab-mcp.example.com/mcp
 ```
 
-The doctor validates the public HTTPS URL, rejects non-public DNS targets, fetches Protected Resource Metadata and Authorization Server Metadata, verifies issuer consistency, and confirms that unauthenticated `/mcp` returns `401` with an OAuth `WWW-Authenticate` challenge containing `resource_metadata`.
+The doctor validates the public HTTPS URL, rejects non-public DNS targets, checks Protected Resource Metadata and Authorization Server Metadata, and confirms that unauthenticated `/mcp` returns the OAuth challenge expected by compatible clients.
 
-A successful doctor/OAuth result proves the remote MCP authentication path. It does **not** prove that a particular plugin reference is bound to that connection.
+A successful OAuth callback proves authentication to that MCP connection. It does not by itself prove that every plugin surface has an explicit app dependency on the same connection.
 
-## 4. Add the server directly in Codex / native MCP
+## OAuth discovery sequence
 
-1. Open **MCP servers**.
-2. Choose **Add server**.
-3. Choose **Streamable HTTP**.
-4. Enter `https://gitlab-mcp.example.com/mcp`.
-5. Save/restart when requested.
-6. Choose **Authenticate** when OAuth sign-in is shown.
-7. Complete GitLab browser authorization.
-8. Verify a harmless read before enabling write policy.
-
-Smoke test:
+In OAuth mode the server exposes:
 
 ```text
-List the GitLab groups and projects I can access.
+/.well-known/oauth-protected-resource
+/.well-known/oauth-authorization-server
+/oauth/register
+/oauth/authorize
+/oauth/token
+/oauth/gitlab/callback
+/mcp
 ```
 
-## 5. Configure ChatGPT and bind the plugin
+The server supports CIMD and DCR-compatible registration flows. Downstream MCP OAuth and upstream GitLab OAuth use PKCE S256.
 
-The exact labels and availability of custom MCP configuration are controlled by the ChatGPT plan/workspace and can change independently of this repository. Where the platform exposes custom MCP Apps/connections, use this sequence:
+## Local development fallback
 
-1. Create/connect the remote MCP endpoint in the ChatGPT platform UI.
-2. Enter the desired public HTTPS endpoint, for example `https://gitlab-mcp.example.com/mcp`.
-3. Complete OAuth.
-4. Scan/refresh tools and verify that the underlying connection exposes the GitLab tools.
-5. Copy the platform-generated **technical ID** for that MCP App/connection exactly. Do not substitute the plugin name, marketplace name, MCP URL, or GitLab OAuth client ID.
-6. Generate the connection-bound marketplace:
+Localhost remains an explicit development option only:
 
 ```bash
-python3 scripts/build_chatgpt_variant.py \
-  --connection-id YOUR_CHATGPT_MCP_CONNECTION_TECHNICAL_ID \
-  --mcp-url https://gitlab-mcp.example.com/mcp
+python3 scripts/build_local_variant.py
 ```
 
-For backwards compatibility, `--app-id` is accepted as an alias for `--connection-id`.
-
-The `--mcp-url` value is validated and recorded as the endpoint expected on the existing connection. The actual plugin dependency is the connection technical ID.
-
-Default output:
+The generated development artifact binds:
 
 ```text
-dist/gitlab-chatgpt-marketplace/
-  .agents/plugins/marketplace.json
-  README.md
-  plugins/gitlab-self-hosted/
-    .app.json
-    .chatgpt-setup.json
-    .codex-plugin/plugin.json
-    skills/...
+http://127.0.0.1:3333/mcp
 ```
 
-Use:
+The repository root marketplace never chooses localhost automatically.
+
+## Legacy compatibility helpers
+
+These scripts remain to avoid breaking existing deployments:
 
 ```text
-gitlab-self-hosted@ademkao-gitlab-chatgpt
+scripts/build_personal_variant.py
+scripts/build_chatgpt_variant.py
 ```
 
-The generated ChatGPT plugin:
+They are no longer required by the normal direct remote MCP path. Do not create a second public repository solely to store their generated output.
 
-- has `apps: "./.app.json"`;
-- has no `mcpServers` entry;
-- has no `.mcp.json`;
-- uses the namespaced `gitlab-self-hosted` binding key;
-- records both `connection_id` and the expected MCP URL in `.chatgpt-setup.json`;
-- explicitly records that it does not create the connection or run OAuth.
+## Troubleshooting
 
-Generating the directory does not modify an already-installed plugin. Import/install the generated marketplace explicitly.
+If the plugin is visible but GitLab tools are missing, check the layers in this order:
 
-## 6. Troubleshooting: plugin is visible but GitLab tools are missing
+1. Confirm the intended `gitlab-self-hosted@ademkao-codex-plugins` package is installed.
+2. Confirm the user's/workspace's remote MCP connection points at the intended HTTPS `/mcp` endpoint.
+3. Confirm OAuth completed for that same connection and the connection itself exposes GitLab tools.
+4. If the ChatGPT surface requires an explicit plugin app dependency, confirm the workspace has a portable app/template binding or use the existing-connection compatibility helper.
+5. Do not solve a missing app binding by committing a private MCP hostname to the public plugin.
 
-Check the package and binding path before repeatedly re-running OAuth.
+## Public configuration guard
 
-```text
-Deprecated:
-  gitlab@ademkao-codex-plugins
-  -> generic id; may resolve to curated GitLab
-
-Portable:
-  gitlab-self-hosted@ademkao-codex-plugins
-  -> workflow plugin only
-  -> no implicit MCP endpoint or connection binding
-
-Local:
-  gitlab-self-hosted@ademkao-gitlab-local
-  -> http://127.0.0.1:3333/mcp
-
-Remote direct:
-  gitlab-self-hosted@ademkao-gitlab-remote
-  -> explicit user-selected HTTPS /mcp
-
-ChatGPT connection-bound:
-  gitlab-self-hosted@ademkao-gitlab-chatgpt
-  -> existing MCP App/connection technical ID
-  -> endpoint/OAuth belong to that connection
-```
-
-A browser message such as `Authentication complete. You may close this window.` proves that the OAuth callback reached the MCP client. It still does not prove that the portable plugin is bound to that authenticated connection.
-
-If OAuth succeeds but the conversation still has no GitLab tools:
-
-1. confirm that the underlying MCP connection itself exposes/scans the expected GitLab tools;
-2. confirm you copied the technical ID from that same connection;
-3. inspect generated `plugins/gitlab-self-hosted/.app.json` and confirm its `id` matches exactly;
-4. confirm the installed plugin is `gitlab-self-hosted@ademkao-gitlab-chatgpt`, not the portable `@ademkao-codex-plugins` package; and
-5. reinstall/import the generated marketplace if the portable plugin was already installed before binding.
-
-Re-running OAuth alone does not add a binding to the portable package.
-
-## 7. Managed workspace App Templates
-
-Managed workspace App Templates are a separate platform feature. This repository does **not** currently ship or claim to be a managed App Template. `.app.json.example` and `build_chatgpt_variant.py` are connection-binding helpers only.
-
-## Remote URL safety
-
-The remote and ChatGPT binding helpers reject non-HTTPS URLs, localhost/private targets, embedded credentials, query strings/fragments, and endpoints that do not use `/mcp`. The live doctor additionally resolves DNS and rejects non-public addresses before making HTTP requests.
-
-## CIMD / DCR
-
-v0.5+ prefers Client ID Metadata Documents (CIMD) for MCP clients that support URL-based client metadata. Dynamic Client Registration (DCR) remains available for compatibility.
-
-Native loopback clients may advertise a portless redirect URI such as `http://127.0.0.1/callback/<client-id>` or `http://localhost/callback/<client-id>` and then choose an ephemeral port for the actual authorization request. The server allows that dynamic port only when the registered URI is portless, both URIs use `http`, the loopback host/path match exactly, the requested port is valid and non-zero, and neither URI contains credentials, a query string, or a fragment. Public redirects and explicitly ported loopback redirects remain exact-match only.
-
-## Read vs write
-
-Read-only deployment:
+CI runs:
 
 ```bash
-GITLAB_WRITE_ENABLED=false
-GITLAB_MERGE_ENABLED=false
+python3 scripts/validate_public_config.py
 ```
 
-Enable writes with `GITLAB_WRITE_ENABLED=true`; the user must also authorize `gitlab:write`. MR merge remains disabled until `GITLAB_MERGE_ENABLED=true`. OAuth scope, deployment policy, project allowlist, and GitLab permissions must all allow the action.
-
-## Product support
-
-OpenAI controls which plans, workspace roles, and ChatGPT/Codex surfaces expose custom MCP Apps/connections, managed templates, and write-capable tools. Those platform capabilities can change independently of this repository, so verify current OpenAI product documentation when deploying.
+The validator keeps the root plugin endpoint-neutral, verifies the localhost fallback remains isolated, and rejects real non-example `/mcp` endpoints from public setup files.

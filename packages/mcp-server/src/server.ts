@@ -11,7 +11,7 @@ import { OAuthGateway, OAuthProtocolError } from "./oauth-gateway.js";
 import { registerGitLabTools } from "./register-tools.js";
 import { registerGitLabV05Tools } from "./register-v05-tools.js";
 
-const VERSION = "0.5.6";
+const VERSION = "0.5.8";
 const config = loadConfig();
 const oauthGateway = config.authMode === "oauth" ? new OAuthGateway(config) : undefined;
 if (oauthGateway) await oauthGateway.init();

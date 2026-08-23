@@ -13,6 +13,39 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 - Observability, audit events, and operational metrics for hosted deployments.
 - Additional GitLab release/member/milestone workflows.
 
+## [0.5.8] - 2026-08-23
+
+### Fixed
+
+- Removed the committed active `.mcp.json` from the public `gitlab-self-hosted` package so the repository no longer exposes or forces a maintainer-specific remote MCP deployment.
+- Removed `mcpServers` from the public source plugin manifest and restored the root marketplace package to an endpoint-neutral workflow plugin.
+- Restored `build_local_variant.py`, `build_personal_variant.py`, `build_chatgpt_variant.py`, and repository validation to treat endpoint binding as explicit user/workspace configuration rather than a property of the public source package.
+
+### Changed
+
+- Normal remote setup is now documented as marketplace install plus a user/workspace-selected HTTPS `/mcp` endpoint and OAuth; no local MCP process, generated remote marketplace, or second repository is required for clients that expose custom MCP connections directly.
+- Added the neutral `workspace-binding/.mcp.remote.json.example` reference using `gitlab-mcp.example.com`.
+- Added `scripts/validate_public_config.py` and CI coverage to keep the root plugin endpoint-neutral, isolate localhost to development fallback, and reject real non-example MCP endpoints from public setup files.
+- Updated English/Traditional Chinese README, ChatGPT integration docs, capability matrix, roadmap, and setup skill to the same endpoint-neutral model.
+- Synchronized `VERSION`, plugin manifest, MCP package, and runtime-reported version at v0.5.8.
+
+### Security
+
+- Maintainer- and organization-specific MCP endpoints must remain outside the public plugin and belong to user/workspace MCP or App configuration.
+- OAuth secrets, GitLab tokens, and workspace-specific connection IDs remain outside the public package.
+
+## [0.5.7] - 2026-08-23
+
+### Changed
+
+- Temporarily changed the repository-root package to use a committed maintainer-hosted remote MCP binding as the default install path.
+- Adapted the local, personal-remote, ChatGPT App-bound builders, validation, and documentation around that direct-bound source package.
+- Synchronized release metadata at v0.5.7.
+
+### Security
+
+- OAuth/GitLab credentials remained outside the plugin package, but the public package exposed a maintainer-specific MCP hostname. v0.5.8 removes that public endpoint and returns the source package to an endpoint-neutral model.
+
 ## [0.5.6] - 2026-08-23
 
 ### Fixed

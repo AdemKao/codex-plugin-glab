@@ -2,96 +2,48 @@
 
 [English](roadmap.md) | [繁體中文](roadmap.zh-TW.md)
 
-## v0.3.0 — Self-hosted MCP foundation
+## 目前方向
 
-已完成：
+本專案讓 public `gitlab-self-hosted` plugin 保持 **endpoint-neutral**，同一個 repo 仍提供 MCP Server implementation。
 
-- bundled TypeScript MCP Server；
-- GitLab.com / Self-Managed host 選擇；
-- server-side PAT / bearer authentication；
-- 核心 project/group/issue/MR/repository/CI read tools；
-- 受控的 issue/MR/branch writes 與 MR merge；
-- project allowlist、read-only / merge-off 安全預設；
-- Docker deployment、tests 與 release automation。
+正常 remote 使用應該是：
 
-## v0.4.0 — Per-user identity and OAuth
+```text
+public plugin
+  + user/workspace 自己選擇的 HTTPS /mcp endpoint
+  + OAuth
+  -> GitLab
+```
 
-已完成：
+Public package 不應內嵌 maintainer-specific deployment URL，也不應偷偷選 localhost。
 
-- Protected Resource Metadata 與 Authorization Server Metadata；
-- per-user GitLab OAuth identity mapping；
-- downstream / upstream PKCE S256；
-- DCR compatibility；
-- MCP access / refresh token 與 rotation；
-- GitLab token 自動 refresh；
-- encrypted single-node OAuth persistence；
-- `gitlab:read` / `gitlab:write` 獨立 enforcement。
+## 近期
 
-## v0.5.0 — Production OAuth 與更深 GitLab workflows
+- 維持 GitLab.com、Self-Managed、Dedicated 的 read/write tool coverage。
+- 擴充更多 GitLab Self-Managed version compatibility fixtures。
+- 改善 capability probing 與 unsupported API error message。
+- 增加更細緻的 per-tool / per-project authorization policy。
+- 強化 hosted deployment 的 observability、audit events、operational metrics。
+- 持續測試 OAuth/CIMD/DCR 與目前 MCP Clients 的相容性。
 
-已完成：
+## Packaging / installation
 
-- CIMD（Client ID Metadata Documents）+ DCR fallback；
-- CIMD SSRF / redirect / size / timeout / host validation；
-- pluggable OAuth store contract；
-- encrypted PostgreSQL OAuth/session backend；
-- 跨 replica atomic OAuth state / authorization-code consume；
-- atomic refresh-token rotation；
-- concurrent GitLab token refresh recovery；
-- PostgreSQL 17 CI integration tests；
-- 完整 OAuth authorize/callback/token/refresh smoke tests；
-- repository tree/file read 與 file create/update/delete tools；
-- MR approve/unapprove/discussion tools；
-- pipeline create/retry/cancel tools；
-- Docker Compose PostgreSQL profile 與 migration 文件。
+- 維持一個 public marketplace root 提供 workflow plugin。
+- 真實 remote MCP URL 留在 user/workspace configuration。
+- `workspace-binding/.mcp.remote.json.example` 只作中性 reference。
+- localhost 只保留為 `build_local_variant.py` 產生的 explicit development fallback。
+- Personal/App-bound builders 只保留 backwards compatibility，不作正常安裝路徑。
+- 只有在平台提供穩定、正式、適合 self-hosted GitLab 設定的 managed App Template 機制時，才考慮導入 template。
 
-## v0.5.1 — Initial workspace binding helper
+## Security
 
-已完成：
+- 保持 read-only default。
+- 保持 merge 獨立 enable flag。
+- Project allowlist 必須維持 authoritative。
+- 阻止 public source files 出現真實 organization MCP endpoint 或 OAuth secret。
+- 持續維護 remote metadata/endpoint validation 的 SSRF protection。
+- 保持 OAuth encrypted persistence 與 multi-replica token/state atomic handling。
 
-- live remote MCP doctor，驗證 Protected Resource Metadata、Authorization Server Metadata 與未登入 `/mcp` OAuth challenge；
-- public HTTPS `/mcp` URL validation 與 unsafe target rejection；
-- initial workspace-specific `.app.json` binding generator；
-- 保留 local Codex 使用的 localhost `.mcp.json`；
-- CI 驗證 helper generation 與 unsafe URL rejection。
+## Future workflows
 
-v0.5.2 重新整理 v0.5.1 引入的產品定位，避免 optional binding helper 被誤解成 personal/Codex 的主要安裝方式，或被誤稱為 OpenAI 原生 App Template。
-
-## v0.5.2 — Direct Codex MCP / OAuth installation UX
-
-已完成：
-
-- personal/Codex remote setup 明確改成 **Add server -> Streamable HTTP -> remote HTTPS `/mcp` -> OAuth discovery/authentication**；
-- direct remote OAuth 不再需要 `.app.json`、workspace App / connector ID 或 `build_chatgpt_variant.py`；
-- portable `plugins/gitlab/.mcp.json` 保留 `http://127.0.0.1:3333/mcp`，作為 same-host local fallback；
-- helper input 從 `app-template/.app.json.example` 移到 `workspace-binding/.app.json.example`，消除 App Template 命名歧義；
-- `build_chatgpt_variant.py` 重新定位成 optional **workspace binding helper**，且要求 existing workspace App / connector ID；
-- generated helper metadata 與 CI validation 明確聲明 output 不是 OpenAI managed App Template；
-- managed workspace App Templates 獨立說明為 administrator / platform feature，而不是本 repo 提供的 template；
-- 同步英文 / 繁中 README、ChatGPT/Codex setup docs、setup skill、capability matrix、roadmap、CHANGELOG；
-- `VERSION`、plugin manifest、MCP package 與 MCP runtime version 同步到 `0.5.2`。
-
-## v0.6 — Policy、observability、compatibility
-
-候選項目：
-
-- per-tool allow/deny policy；
-- 更細的 group/project scoped policy；
-- OAuth sign-in、write、destructive、merge audit events；
-- Prometheus / OpenTelemetry operational metrics；
-- rate-limit / backpressure visibility；
-- GitLab Self-Managed version fixtures 與 capability probing；
-- labels、milestones、releases、members 與更多 CI/CD operations；
-- hosted deployment 的 secret / encryption-key rotation procedures。
-
-## Compatibility and quality
-
-持續進行：
-
-- GitLab.com 與代表性 Self-Managed 版本的 live OAuth interoperability tests；
-- API capability probing；
-- tool schema / OAuth endpoint contract tests；
-- authorization、CIMD metadata fetch、encrypted persistence、write boundary security review；
-- 英文 / 繁中核心文件 parity。
-
-GitLab native MCP 仍是 optional alternative，不是 dependency。
+未來可考慮 release workflows、members、milestones、更完整的 CI diagnostics，以及其他能以 least-privilege 明確控管的 GitLab administrative operations。

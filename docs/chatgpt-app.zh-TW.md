@@ -1,127 +1,101 @@
-# ChatGPT / Codex Remote MCP Integration
+# ChatGPT / Codex Remote MCP 整合
 
 [English](chatgpt-app.md) | [繁體中文](chatgpt-app.zh-TW.md)
 
-Self-hosted GitLab 整合應先把 bundled MCP Server 部署在 HTTPS 後方。使用 per-user OAuth mode 時，每個使用者授權自己的 GitLab identity；MCP client 取得 MCP credential，而不是 GitLab PAT。
+## 目標
 
-## Package identity
+使用同一個公開 plugin repo，但不暴露 maintainer-specific MCP deployment，也不要求使用者在自己電腦執行 MCP Server。
 
-從 v0.5.4 開始，本 repo 的第三方 plugin identifier 是：
-
-```text
-gitlab-self-hosted
-```
-
-不要再使用 `gitlab@ademkao-codex-plugins`；generic `gitlab` identifier 可能解析到 OpenAI curated GitLab plugin。
-
-Portable reference：
+預設 package：
 
 ```text
 gitlab-self-hosted@ademkao-codex-plugins
 ```
 
-Portable package 刻意維持 **endpoint-unbound**：只包含 workflow skills 與 metadata，不包含 `mcpServers`、不自動載入 `.mcp.json`，也沒有 user/workspace-specific 的 ChatGPT MCP connection binding。
+它刻意保持 endpoint-neutral。真實 remote MCP URL 屬於使用者或 workspace 的設定，而不是 public Git repo。
 
-明確產生的 variants：
+## 正常 remote 路徑
 
-```text
-gitlab-self-hosted@ademkao-gitlab-local
-gitlab-self-hosted@ademkao-gitlab-remote
-gitlab-self-hosted@ademkao-gitlab-chatgpt
-```
-
-## 最重要的差異
-
-請把以下四層分開：
-
-1. **Portable plugin** — 只有 workflow skills / metadata，不選擇 MCP endpoint。
-2. **Codex / native MCP connection** — 直接新增 local/remote MCP server，或產生明確的 local/remote plugin variant。
-3. **ChatGPT MCP App / connection** — 持有 remote MCP endpoint 與 OAuth session。
-4. **ChatGPT connection-bound plugin variant** — 透過 `.app.json` 綁定上述 existing MCP connection 的 platform-generated technical ID。
-
-「安裝 repository plugin」與「建立／授權 remote MCP connection」是兩個不同的 operation。看得到 `@GitLab Self-Hosted` **不代表** plugin 已自動找到並綁定使用者自己的 MCP connection。
-
-## 我應該使用哪一條設定路徑？
-
-### Codex / native MCP：直接新增 remote server
+對支援直接新增 custom remote MCP server 的 Client：
 
 ```text
-Codex / native MCP client
-  -> Add server
-  -> Streamable HTTP
-  -> https://gitlab-mcp.example.com/mcp
-  -> OAuth discovery
-  -> GitLab OAuth
-  -> GitLab REST API v4
+安裝 repository marketplace root
+        |
+        v
+GitLab Self-Hosted skills
+        +
+使用者 / workspace MCP setting
+  https://gitlab-mcp.example.com/mcp
+        |
+        v
+MCP OAuth discovery
+        |
+        v
+GitLab OAuth
+        |
+        v
+GitLab REST API v4
 ```
 
-這條路徑不需要 `.app.json`，也不需要 generated ChatGPT plugin variant。
+設定步驟：
 
-### 明確的 local Codex variant
+1. 安裝本 repo 的 marketplace root。
+2. 在 Client 的 MCP / App 設定中加入使用者或 workspace 自己的 public remote HTTPS `/mcp` endpoint。
+3. 完成 OAuth。
+4. Client 若提供 refresh/scan tools，重新掃描工具。
+5. 先驗證 harmless read，再開 write。
 
-Bundled MCP server 與 Codex 跑在同一台機器時：
+這條 direct-MCP 路徑不需要 local MCP process、不需要 generated remote marketplace，也不需要第二個 repo。
 
-```bash
-python3 scripts/build_local_variant.py
-```
+## 為什麼 endpoint 不直接寫進 plugin
 
-Import/install generated marketplace 後使用：
+Agent Plugin 的 HTTP MCP 設定要求 literal absolute URL。目前格式不會把 HTTP `url` 欄位中的任意 `${ENV_VAR}` 當成 install-time endpoint substitution。
+
+因此只能二選一：
+
+- commit 一份 active `.mcp.json`，它就必須指向某一個 concrete URL；或
+- public package 保持 endpoint-neutral，讓每個使用者 / workspace 自己設定 URL。
+
+本專案選第二種。這可以避免公開 operator 的私人 infrastructure，也避免其他使用者被偷偷送到 maintainer-controlled server。
+
+中性 reference：
 
 ```text
-gitlab-self-hosted@ademkao-gitlab-local
+plugins/gitlab-self-hosted/workspace-binding/.mcp.remote.json.example
 ```
 
-只有這個 generated artifact 會包含：
+它刻意使用：
 
 ```text
-.mcp.json -> http://127.0.0.1:3333/mcp
+https://gitlab-mcp.example.com/mcp
 ```
 
-### 明確的 remote MCP plugin variant
+不要把 committed example 改成真實 organization endpoint。
 
-如果 plugin reference 本身要載入使用者指定的 remote MCP server：
+## ChatGPT App binding 的重要差異
 
-```bash
-python3 scripts/build_personal_variant.py \
-  --mcp-url https://gitlab-mcp.example.com/mcp
-```
+ChatGPT plugin 可以包含 skills，也可以依賴 apps；但 plugin package 與已 connect/authenticate 的 MCP App 是兩個不同物件。
 
-Import/install generated marketplace 後使用：
+如果 ChatGPT surface 會直接把使用者設定的 MCP App tools 提供給 conversation，endpoint-neutral workflow 可以直接使用該 connection，不需要再產生另一個 repo variant。
 
-```text
-gitlab-self-hosted@ademkao-gitlab-remote
-```
+如果 ChatGPT surface 要求 plugin 本身必須宣告 app dependency，靜態 public plugin 無法動態知道任意 user-created connection 的 technical ID。要讓這種 dependency 可攜，平台層通常需要：
 
-Helper 會驗證 public HTTPS `/mcp` endpoint，並只把 URL 寫到 generated artifact，不修改 committed portable plugin。
+- 跨 workspace 都有效的 canonical shared app / connector ID；或
+- 由 managed workspace 支援、可建立 workspace-specific app 的 managed App Template。
 
-### ChatGPT：existing MCP connection + connection-bound plugin
+本 repo 目前沒有 canonical OpenAI-managed GitLab Self-Hosted app ID，也沒有 OpenAI-managed App Template，因此不會假裝 placeholder connection ID 或 `${GITLAB_MCP_URL}` 能替所有 workspace 做 one-click binding。
 
-```text
-ChatGPT MCP App / connection
-  -> configured endpoint: https://gitlab-mcp.example.com/mcp
-  -> OAuth
-  -> scanned GitLab tools
-  -> platform-generated technical ID
+Legacy `build_chatgpt_variant.py` 仍保留給已經有 connection technical ID，而且明確需要 plugin-bound artifact 的環境。它是 compatibility tooling，不是正常 remote setup。
 
-GitLab Self-Hosted plugin
-  -> gitlab-self-hosted@ademkao-gitlab-chatgpt
-  -> .app.json
-  -> existing MCP connection technical ID
-```
+## 部署 bundled OAuth MCP Server
 
-Generated plugin 使用 `apps: "./.app.json"`，但不包含 direct MCP server definition。
-
-## 1. 建立 GitLab OAuth Application
-
-在 target GitLab instance 建立 OAuth Application，callback：
+在目標 GitLab instance 建 OAuth Application。Callback 使用你自己的 public hostname，例如：
 
 ```text
 https://gitlab-mcp.example.com/oauth/gitlab/callback
 ```
 
-Application ID/secret 與 `OAUTH_ENCRYPTION_KEY` 應放 deployment secret manager，不要放進 plugin 或 prompt。
-
-## 2. 部署 OAuth mode
+環境設定範例：
 
 ```bash
 MCP_AUTH_MODE=oauth
@@ -143,157 +117,83 @@ OAUTH_STORE_DRIVER=file
 OAUTH_STORE_PATH=/data/oauth-store.json
 ```
 
-Production / multi-replica：
+Production multi-replica：
 
 ```bash
 OAUTH_STORE_DRIVER=postgres
 OAUTH_DATABASE_URL=postgresql://user:password@db:5432/codex_glab
 ```
 
-## 3. 驗證 remote endpoint
+## 驗證 remote endpoint
 
 ```bash
 python3 scripts/chatgpt_mcp_doctor.py \
   --mcp-url https://gitlab-mcp.example.com/mcp
 ```
 
-Doctor 會檢查 public HTTPS URL、DNS public address、Protected Resource Metadata、Authorization Server Metadata、issuer consistency，以及未登入 `/mcp` 是否回 `401` 並在 `WWW-Authenticate` 中帶 `resource_metadata`。
+Doctor 會驗證 public HTTPS URL、拒絕 non-public DNS target、檢查 Protected Resource Metadata / Authorization Server Metadata，並確認未登入 `/mcp` 會回相容 Client 需要的 OAuth challenge。
 
-Doctor 與 OAuth 成功代表 remote MCP authentication path 正常，但**不代表**某個 plugin reference 已經綁定這個 connection。
+OAuth callback 成功只代表該 MCP connection 已完成 authentication；它本身不代表所有 plugin surface 都已經對同一個 connection 建立 explicit app dependency。
 
-## 4. 在 Codex / native MCP 直接新增 server
+## OAuth discovery sequence
 
-1. 開啟 **MCP servers**；
-2. 選 **Add server**；
-3. 選 **Streamable HTTP**；
-4. 輸入 `https://gitlab-mcp.example.com/mcp`；
-5. 儲存，client 要求時 restart；
-6. 顯示 OAuth sign-in 時選 **Authenticate**；
-7. 在 browser 完成 GitLab authorization；
-8. 開 write policy 前先驗證 harmless read。
-
-Smoke test：
+OAuth mode 提供：
 
 ```text
-列出我可以存取的 GitLab groups 和 projects。
+/.well-known/oauth-protected-resource
+/.well-known/oauth-authorization-server
+/oauth/register
+/oauth/authorize
+/oauth/token
+/oauth/gitlab/callback
+/mcp
 ```
 
-## 5. 設定 ChatGPT 並綁定 plugin
+Server 支援 CIMD 與 DCR-compatible registration flow。Downstream MCP OAuth 與 upstream GitLab OAuth 都使用 PKCE S256。
 
-Custom MCP 的實際 UI 名稱與可用性由 ChatGPT plan / workspace 控制，也可能獨立於本 repo 改變。當平台提供 custom MCP App / connection 時，依下列順序：
+## Local development fallback
 
-1. 在 ChatGPT platform UI 建立／連接 remote MCP endpoint。
-2. 輸入 public HTTPS endpoint，例如 `https://gitlab-mcp.example.com/mcp`。
-3. 完成 OAuth。
-4. Scan / refresh tools，確認 underlying connection 能 expose GitLab tools。
-5. 完整複製該 MCP App / connection 的 platform-generated **technical ID**。不要拿 plugin name、marketplace name、MCP URL 或 GitLab OAuth client ID 代替。
-6. 產生 connection-bound marketplace：
+localhost 只保留作 explicit development option：
 
 ```bash
-python3 scripts/build_chatgpt_variant.py \
-  --connection-id YOUR_CHATGPT_MCP_CONNECTION_TECHNICAL_ID \
-  --mcp-url https://gitlab-mcp.example.com/mcp
+python3 scripts/build_local_variant.py
 ```
 
-為了 backwards compatibility，`--app-id` 仍可作為 `--connection-id` 的 alias。
-
-`--mcp-url` 會被驗證並記錄成 existing connection 預期使用的 endpoint；真正的 plugin dependency 是 connection technical ID。
-
-預設輸出：
+Generated development artifact 才會綁：
 
 ```text
-dist/gitlab-chatgpt-marketplace/
-  .agents/plugins/marketplace.json
-  README.md
-  plugins/gitlab-self-hosted/
-    .app.json
-    .chatgpt-setup.json
-    .codex-plugin/plugin.json
-    skills/...
+http://127.0.0.1:3333/mcp
 ```
 
-使用：
+Repository root marketplace 不會自動選 localhost。
+
+## Legacy compatibility helpers
+
+為避免破壞既有 deployment，以下 scripts 仍保留：
 
 ```text
-gitlab-self-hosted@ademkao-gitlab-chatgpt
+scripts/build_personal_variant.py
+scripts/build_chatgpt_variant.py
 ```
 
-Generated ChatGPT plugin：
+正常 direct remote MCP path 不再需要它們。不要只為了保存 generated output 再建立第二個 public repo。
 
-- 有 `apps: "./.app.json"`；
-- 沒有 `mcpServers`；
-- 沒有 `.mcp.json`；
-- 使用 namespaced `gitlab-self-hosted` binding key；
-- `.chatgpt-setup.json` 同時記錄 `connection_id` 與 expected MCP URL；
-- metadata 明確標示它不會建立 connection，也不會執行 OAuth。
+## Troubleshooting
 
-只執行 builder 不會修改已安裝的 plugin；必須明確 import/install generated marketplace。
+Plugin 看得到但 GitLab tools 不見時，依序檢查：
 
-## 6. Troubleshooting：plugin 看得到但沒有 GitLab tools
+1. 確認安裝的是 `gitlab-self-hosted@ademkao-codex-plugins`。
+2. 確認 user/workspace remote MCP connection 指向預期的 HTTPS `/mcp` endpoint。
+3. 確認 OAuth 是對同一個 connection 完成，而且該 connection 本身真的 exposes GitLab tools。
+4. 如果 ChatGPT surface 要 explicit plugin app dependency，確認 workspace 有 portable app/template binding，或使用 existing-connection compatibility helper。
+5. 不要用「把私人 MCP hostname commit 到 public plugin」的方式修 app binding。
 
-先檢查 package 與 binding path，不要只是不斷重跑 OAuth。
+## Public configuration guard
 
-```text
-Deprecated:
-  gitlab@ademkao-codex-plugins
-  -> generic id，可能解析到 curated GitLab
-
-Portable:
-  gitlab-self-hosted@ademkao-codex-plugins
-  -> workflow plugin only
-  -> 沒有 implicit MCP endpoint 或 connection binding
-
-Local:
-  gitlab-self-hosted@ademkao-gitlab-local
-  -> http://127.0.0.1:3333/mcp
-
-Remote direct:
-  gitlab-self-hosted@ademkao-gitlab-remote
-  -> 使用者明確指定的 HTTPS /mcp
-
-ChatGPT connection-bound:
-  gitlab-self-hosted@ademkao-gitlab-chatgpt
-  -> existing MCP App / connection technical ID
-  -> endpoint / OAuth 屬於該 connection
-```
-
-Browser 顯示 `Authentication complete. You may close this window.` 代表 OAuth callback 已成功回到 MCP client，但仍不代表 portable plugin 已綁到該 authenticated connection。
-
-如果 OAuth 成功，但 conversation 還是沒有 GitLab tools：
-
-1. 確認 underlying MCP connection 本身確實 scan / expose 預期的 GitLab tools；
-2. 確認 technical ID 是從同一個 connection 複製；
-3. 檢查 generated `plugins/gitlab-self-hosted/.app.json`，其 `id` 必須完全一致；
-4. 確認實際安裝的是 `gitlab-self-hosted@ademkao-gitlab-chatgpt`，不是 portable `@ademkao-codex-plugins`；
-5. 如果 portable plugin 先前已安裝，請明確 import/install generated marketplace。
-
-只重跑 OAuth 不會替 portable package 新增 binding。
-
-## 7. Managed workspace App Templates
-
-Managed workspace App Template 是獨立的平台功能。本 repo **目前沒有提供，也不宣稱自己是 managed App Template**。`.app.json.example` 與 `build_chatgpt_variant.py` 只是 connection-binding helper。
-
-## Remote URL safety
-
-Remote 與 ChatGPT binding helpers 會拒絕非 HTTPS URL、localhost/private target、embedded credentials、query/fragment，以及不是 `/mcp` 的 endpoint。Live doctor 還會做 DNS resolve，在 HTTP request 前拒絕 non-public address。
-
-## CIMD / DCR
-
-v0.5+ 對支援 URL client metadata 的 MCP client 優先使用 Client ID Metadata Documents (CIMD)。Dynamic Client Registration (DCR) 保留作 compatibility fallback。
-
-Native loopback client 可以宣告沒有 port 的 redirect URI，例如 `http://127.0.0.1/callback/<client-id>` 或 `http://localhost/callback/<client-id>`，實際 authorization request 再選 ephemeral port。Server 只有在 registered URI 沒有 port、兩邊都是 `http`、loopback host/path 完全一致、requested port 合法且非 0，而且沒有 credentials/query/fragment 時才允許 dynamic-port matching。Public redirect URI 與已指定 port 的 loopback URI 仍維持 exact match。
-
-## Read / write
-
-Read-only deployment：
+CI 會執行：
 
 ```bash
-GITLAB_WRITE_ENABLED=false
-GITLAB_MERGE_ENABLED=false
+python3 scripts/validate_public_config.py
 ```
 
-開啟 write 使用 `GITLAB_WRITE_ENABLED=true`，user 也必須授權 `gitlab:write`。MR merge 在 `GITLAB_MERGE_ENABLED=true` 前仍 disabled。OAuth scope、deployment policy、project allowlist 與 GitLab permission 必須全部允許 action。
-
-## Product support
-
-哪些 OpenAI plan、workspace role、ChatGPT / Codex surface 提供 custom MCP App / connection、managed template 與 write-capable tools，是平台能力，可能獨立於本 repo 改變；部署時請確認最新 OpenAI product documentation。
+Validator 會確保 root plugin endpoint-neutral、localhost fallback 維持隔離，並拒絕 public setup files 出現真實、非 example 的 `/mcp` endpoint。

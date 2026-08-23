@@ -1,7 +1,7 @@
 {
   "name": "gitlab-self-hosted",
-  "version": "0.5.6",
-  "description": "Inspect and operate GitLab projects through the bundled production-oriented self-hosted MCP server with safe shared-token or per-user OAuth workflows for Codex and ChatGPT.",
+  "version": "0.5.8",
+  "description": "Inspect and operate GitLab through a user-configured remote HTTPS MCP server with OAuth, while keeping localhost available only as an explicit development fallback.",
   "author": {
     "name": "AdemKao",
     "url": "https://github.com/AdemKao"
@@ -26,8 +26,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "GitLab Self-Hosted",
-    "shortDescription": "Self-hosted GitLab MCP with OAuth and CIMD",
-    "longDescription": "Use the bundled self-hosted GitLab MCP server to inspect projects, review merge requests, manage issues, operate repository files and pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed. The portable plugin intentionally does not bind an MCP endpoint or a user-specific ChatGPT MCP connection: configure the appropriate local, remote, or ChatGPT connection-bound variant for your environment. The distinct gitlab-self-hosted package identifier avoids collision with the OpenAI-curated GitLab plugin.",
+    "shortDescription": "GitLab via configurable remote MCP + OAuth",
+    "longDescription": "Use GitLab workflow skills with a remote HTTPS MCP server chosen by the user or workspace. The public plugin intentionally embeds no maintainer-specific MCP endpoint: configure your own HTTPS /mcp connection in ChatGPT, Codex, or another compatible MCP client and complete OAuth there. Localhost remains an explicit development fallback only. No second repository or generated remote marketplace is required for the normal direct-MCP setup path.",
     "developerName": "AdemKao",
     "category": "Developer Tools",
     "capabilities": [
