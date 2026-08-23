@@ -13,6 +13,29 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 - Observability, audit events, and operational metrics for hosted deployments.
 - Additional GitLab release/member/milestone workflows.
 
+## [0.5.4] - 2026-08-23
+
+### Fixed
+
+- Fixed package resolution ambiguity where the third-party plugin's generic internal identifier `gitlab` could resolve to OpenAI's curated GitLab plugin instead of this repository's self-hosted package.
+- Renamed the source plugin folder, marketplace entry, and plugin manifest name to the distinct `gitlab-self-hosted` identifier.
+- Updated the generated ChatGPT App-bound marketplace to use `gitlab-self-hosted@ademkao-gitlab-chatgpt` and a namespaced `gitlab-self-hosted` App binding key.
+- Added validation that rejects the legacy `plugins/gitlab` package, generic `gitlab` marketplace entries, folder/manifest/marketplace identity mismatches, and generated artifacts that recreate the collision-prone generic package.
+
+### Changed
+
+- Portable/local plugin reference is now `gitlab-self-hosted@ademkao-codex-plugins`.
+- Generated ChatGPT App-bound plugin reference is now `gitlab-self-hosted@ademkao-gitlab-chatgpt`.
+- The user-facing display name is now **GitLab Self-Hosted** while MCP tool names remain unchanged.
+- English and Traditional Chinese root/plugin READMEs, ChatGPT integration docs, and setup skill now document the v0.5.4 package-identity migration and troubleshooting order: verify package resolution first, then App binding/OAuth.
+- Synchronized `VERSION`, plugin manifest, MCP package, and MCP runtime-reported version at v0.5.4.
+
+### Security
+
+- Workspace-specific App/connector IDs remain outside the portable public source package by default.
+- Generated App-bound packages still remove the localhost `.mcp.json` / `mcpServers` dependency and require explicit marketplace import/installation.
+- Remote MCP URL safety checks continue to reject non-HTTPS, localhost, private/link-local literal IPs, embedded credentials, query/fragment data, and non-`/mcp` endpoints.
+
 ## [0.5.3] - 2026-08-23
 
 ### Fixed
