@@ -28,6 +28,7 @@ const WRITE_SCOPE = "gitlab:write";
 const CIMD_MAX_BYTES = 65_536;
 const CIMD_DEFAULT_CACHE_SECONDS = 900;
 const CIMD_MAX_CACHE_SECONDS = 86_400;
+const DYNAMIC_LOOPBACK_REDIRECT_HOSTS = new Set(["127.0.0.1", "localhost"]);
 
 interface GitLabTokenResponse {
   access_token: string;
@@ -78,6 +79,35 @@ function validateRedirectUri(raw: string): string {
     throw new OAuthProtocolError("invalid_redirect_uri", "http redirect URIs are allowed only on loopback hosts");
   }
   return url.toString();
+}
+
+function redirectUriMatchesRegistration(registered: string, requested: string): boolean {
+  if (registered === requested) return true;
+
+  const registeredUrl = new URL(registered);
+  const requestedUrl = new URL(requested);
+  if (
+    registeredUrl.protocol !== "http:" ||
+    requestedUrl.protocol !== "http:" ||
+    !DYNAMIC_LOOPBACK_REDIRECT_HOSTS.has(registeredUrl.hostname) ||
+    registeredUrl.hostname !== requestedUrl.hostname ||
+    registeredUrl.port !== "" ||
+    requestedUrl.port === "" ||
+    registeredUrl.pathname !== requestedUrl.pathname ||
+    registeredUrl.username !== "" ||
+    registeredUrl.password !== "" ||
+    requestedUrl.username !== "" ||
+    requestedUrl.password !== "" ||
+    registeredUrl.search !== "" ||
+    requestedUrl.search !== "" ||
+    registeredUrl.hash !== "" ||
+    requestedUrl.hash !== ""
+  ) {
+    return false;
+  }
+
+  const requestedPort = Number(requestedUrl.port);
+  return Number.isInteger(requestedPort) && requestedPort > 0 && requestedPort <= 65_535;
 }
 
 function normalizeScopes(raw: string | undefined, config: ServerConfig): string[] {
@@ -270,7 +300,7 @@ export class OAuthGateway {
 
     const client = await this.resolveClient(clientId);
     const redirectUri = validateRedirectUri(redirectUriRaw);
-    if (!client.redirectUris.includes(redirectUri)) {
+    if (!client.redirectUris.some((registered) => redirectUriMatchesRegistration(registered, redirectUri))) {
       throw new OAuthProtocolError("invalid_request", "redirect_uri is not registered for this client");
     }
 

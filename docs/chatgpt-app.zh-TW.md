@@ -191,6 +191,10 @@ Live doctor 還會額外做 DNS resolve，在任何 HTTP request 前拒絕解析
 
 v0.5+ 對支援 URL client metadata 的 MCP client 優先使用 Client ID Metadata Documents (CIMD)。Server 會驗證 metadata 並預設阻擋 private-network SSRF target。Dynamic Client Registration (DCR) 則保留作 compatibility fallback。
 
+ChatGPT / Codex 這類 native loopback client 可能在 metadata 裡宣告沒有 port 的 redirect URI，例如 `http://127.0.0.1/callback/<client-id>` 或 `http://localhost/callback/<client-id>`，實際 authorization request 再動態選一個 ephemeral port。Server 只有在 registered URI 沒有 port、兩邊都是 `http`、loopback host 與 path 完全一致、requested port 是合法非 0 port，而且兩邊都沒有 credentials、query string、fragment 時，才允許這個 dynamic-port matching。Public redirect URI，以及註冊時已明確指定 port 的 loopback URI，仍維持 exact match。
+
+Authorization transaction 會保存實際使用的完整 dynamic redirect URI，因此 authorization-code exchange 必須再帶回同一個完整 URI，包含當次選到的 port。這樣 CIMD 可以直接支援 native-client dynamic port，不需要只為了這個情況關閉 CIMD 或退回 DCR。
+
 ## Read / write
 
 Read-only deployment：
