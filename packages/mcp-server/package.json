@@ -1,6 +1,6 @@
 {
   "name": "@codex-plugin-glab/mcp-server",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "private": true,
   "description": "Production-oriented self-hosted GitLab MCP server with per-user OAuth, CIMD, and multi-replica PostgreSQL sessions.",
   "type": "module",

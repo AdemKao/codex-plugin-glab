@@ -98,26 +98,45 @@ def validate_no_operator_endpoint_leaks() -> None:
                 )
 
 
-def validate_remote_first_docs() -> None:
+def validate_documented_binding_paths() -> None:
     english = (ROOT / "README.md").read_text(encoding="utf-8")
     chinese = (ROOT / "README.zh-TW.md").read_text(encoding="utf-8")
     setup = (PLUGIN / "skills" / "gitlab-setup" / "SKILL.md").read_text(encoding="utf-8")
 
-    for needle in ("user-configured", "remote HTTPS", "localhost"):
+    for needle in (
+        "registered MCP App",
+        "plugin_asdk_app_",
+        "build_chatgpt_app.py",
+        "remote HTTPS",
+        "localhost",
+    ):
         if needle not in english:
             fail(f"README.md must document {needle!r}")
-    for needle in ("使用者", "remote HTTPS", "localhost"):
+    for needle in (
+        "Registered MCP App",
+        "plugin_asdk_app_",
+        "build_chatgpt_app.py",
+        "remote HTTPS",
+        "localhost",
+    ):
         if needle not in chinese:
             fail(f"README.zh-TW.md must document {needle!r}")
-    if "maintainer-specific" not in setup or "build variant" not in setup:
-        fail("setup skill must document endpoint privacy and the no-build normal path")
+    for needle in (
+        "maintainer-specific",
+        "endpoint-neutral",
+        "plugin_asdk_app_",
+        "build_chatgpt_app.py",
+        "localhost",
+    ):
+        if needle not in setup:
+            fail(f"setup skill must document {needle!r}")
 
 
 def main() -> None:
     validate_source_is_endpoint_neutral()
     validate_examples()
     validate_no_operator_endpoint_leaks()
-    validate_remote_first_docs()
+    validate_documented_binding_paths()
     print("Public plugin configuration validation passed.")
 
 

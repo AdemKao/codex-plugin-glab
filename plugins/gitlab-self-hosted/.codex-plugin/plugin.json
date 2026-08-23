@@ -1,7 +1,7 @@
 {
   "name": "gitlab-self-hosted",
-  "version": "0.5.8",
-  "description": "Inspect and operate GitLab through a user-configured remote HTTPS MCP server with OAuth, while keeping localhost available only as an explicit development fallback.",
+  "version": "0.5.9",
+  "description": "GitLab Self-Hosted workflows over OAuth MCP, with a first-class registered ChatGPT App binding path and explicit direct-MCP development fallbacks.",
   "author": {
     "name": "AdemKao",
     "url": "https://github.com/AdemKao"
@@ -26,8 +26,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "GitLab Self-Hosted",
-    "shortDescription": "GitLab via configurable remote MCP + OAuth",
-    "longDescription": "Use GitLab workflow skills with a remote HTTPS MCP server chosen by the user or workspace. The public plugin intentionally embeds no maintainer-specific MCP endpoint: configure your own HTTPS /mcp connection in ChatGPT, Codex, or another compatible MCP client and complete OAuth there. Localhost remains an explicit development fallback only. No second repository or generated remote marketplace is required for the normal direct-MCP setup path.",
+    "shortDescription": "GitLab via registered MCP App + OAuth",
+    "longDescription": "Use GitLab workflow skills with an OAuth-enabled MCP server. For ChatGPT plugin usage, register the remote HTTPS /mcp server in Developer mode, copy the platform-generated plugin_asdk_app... technical ID, and build the App-bound plugin variant so its manifest declares apps: ./.app.json. The public source package intentionally stays endpoint-neutral because registered App IDs are workspace-specific. Direct remote MCP and localhost remain explicit fallback/development paths.",
     "developerName": "AdemKao",
     "category": "Developer Tools",
     "capabilities": [
