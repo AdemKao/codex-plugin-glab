@@ -191,6 +191,10 @@ The live doctor additionally resolves DNS and rejects any resolved non-public ad
 
 v0.5+ prefers Client ID Metadata Documents (CIMD) for MCP clients that support URL-based client metadata. The server validates the metadata document and blocks private-network SSRF targets by default. Dynamic Client Registration (DCR) remains available for compatibility.
 
+Native loopback clients such as ChatGPT/Codex may advertise a portless redirect URI such as `http://127.0.0.1/callback/<client-id>` or `http://localhost/callback/<client-id>` and then choose an ephemeral port for the actual authorization request. The server accepts that dynamic port only when the registered URI is portless, both URIs use `http`, the loopback host and path match exactly, the requested port is valid and non-zero, and neither URI contains credentials, a query string, or a fragment. Public redirects and loopback redirects registered with an explicit port continue to require exact matching.
+
+The authorization transaction stores the actual dynamic redirect URI, so the authorization-code exchange must present that same full URI, including the selected port. CIMD therefore works with this native-client pattern without disabling CIMD or falling back to DCR solely for the dynamic port.
+
 ## Read vs write
 
 Read-only deployment:
