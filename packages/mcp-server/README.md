@@ -2,10 +2,13 @@
 
 Self-hosted MCP server used by `codex-plugin-glab` to expose a controlled GitLab REST API surface to ChatGPT, Codex, and other MCP clients.
 
-v0.4 supports two authentication modes:
+v0.5 supports:
 
-- `shared-token` — v0.3-compatible trusted single-user/service-token mode.
+- `shared-token` — trusted single-user/service-token mode.
 - `oauth` — each MCP user authorizes their own GitLab identity.
+- CIMD client registration with DCR fallback.
+- encrypted file OAuth persistence for one replica.
+- PostgreSQL OAuth persistence for production multi-replica deployments.
 
 ## Shared-token quick start
 
@@ -19,13 +22,13 @@ The safe local default is `http://127.0.0.1:3333/mcp` with write tools disabled.
 
 ## Per-user OAuth quick start
 
-Create a GitLab OAuth application with this redirect URI:
+Create a GitLab OAuth application with redirect URI:
 
 ```text
 https://gitlab-mcp.example.com/oauth/gitlab/callback
 ```
 
-GitLab recommends authorization code with PKCE. Configure the server:
+Configure:
 
 ```bash
 MCP_AUTH_MODE=oauth
@@ -35,69 +38,89 @@ GITLAB_HOST=https://gitlab.com
 GITLAB_OAUTH_CLIENT_ID=...
 GITLAB_OAUTH_CLIENT_SECRET=...
 OAUTH_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+OAUTH_STORE_DRIVER=file
 OAUTH_STORE_PATH=/data/oauth-store.json
 npm run dev
 ```
 
-The OAuth server exposes:
+For multiple replicas:
+
+```bash
+OAUTH_STORE_DRIVER=postgres
+OAUTH_DATABASE_URL=postgresql://user:password@db:5432/codex_glab
+```
+
+The store creates its schema idempotently at startup; the equivalent SQL is documented in `migrations/001_oauth_postgres.sql`.
+
+## OAuth discovery and client registration
 
 ```text
 /.well-known/oauth-protected-resource
 /.well-known/oauth-authorization-server
-/oauth/register
+/oauth/register          # DCR fallback
 /oauth/authorize
 /oauth/token
 /oauth/gitlab/callback
 /mcp
 ```
 
-MCP clients discover the authorization server from Protected Resource Metadata. Current clients may dynamically register, complete downstream PKCE, then get redirected through the GitLab OAuth flow. The resulting MCP session carries that user's GitLab permissions rather than a server-wide GitLab identity.
+The authorization metadata advertises CIMD when enabled. Modern clients can use an HTTPS metadata document URL as `client_id`; DCR remains enabled by default for clients that still rely on it.
+
+CIMD protection includes exact client-id matching, redirect validation, no redirects during metadata fetch, document size/time limits, bounded caching, optional hostname allowlists, and private-network SSRF blocking by default.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `MCP_AUTH_MODE` | `shared-token` | `shared-token` or `oauth` |
-| `GITLAB_HOST` | `https://gitlab.com` | GitLab.com or Self-Managed base URL |
-| `GITLAB_TOKEN` | shared mode: required | PAT, project/group token, or OAuth bearer token |
-| `GITLAB_TOKEN_TYPE` | `private-token` | `private-token` or `bearer` in shared mode |
-| `PUBLIC_BASE_URL` | OAuth: required | Public HTTPS origin for OAuth discovery/callbacks |
+| `GITLAB_HOST` | `https://gitlab.com` | GitLab.com / Self-Managed / Dedicated base URL |
+| `GITLAB_TOKEN` | shared mode: required | PAT/project/group/OAuth token |
+| `GITLAB_TOKEN_TYPE` | `private-token` | `private-token` or `bearer` |
+| `PUBLIC_BASE_URL` | OAuth: required | Public HTTPS OAuth origin |
 | `GITLAB_OAUTH_CLIENT_ID` | OAuth: required | GitLab OAuth Application ID |
 | `GITLAB_OAUTH_CLIENT_SECRET` | OAuth: required | GitLab OAuth Application secret |
-| `OAUTH_ENCRYPTION_KEY` | OAuth: required | Base64 encoding of exactly 32 random bytes |
-| `OAUTH_STORE_PATH` | `./data/oauth-store.json` | Encrypted OAuth client/session store |
-| `OAUTH_DCR_ENABLED` | `true` | Enable Dynamic Client Registration for compatible MCP clients |
-| `GITLAB_ALLOWED_PROJECTS` | empty | Optional comma-separated allowlist of IDs or namespace paths |
-| `GITLAB_WRITE_ENABLED` | `false` | Enables issue/MR/branch write tools |
-| `GITLAB_MERGE_ENABLED` | `false` | Separately enables MR merge tool |
-| `MCP_HOST` | `127.0.0.1` | HTTP bind address |
-| `MCP_PORT` | `3333` | HTTP port |
-| `MCP_PATH` | `/mcp` | MCP endpoint path |
-| `MCP_AUTH_TOKEN` | empty | Shared-mode bearer token protecting the MCP endpoint |
-| `MCP_ALLOW_INSECURE_NO_AUTH` | `false` | Shared mode only: explicitly allow unauthenticated non-loopback endpoint |
+| `OAUTH_ENCRYPTION_KEY` | OAuth: required | Base64 of exactly 32 random bytes |
+| `OAUTH_STORE_DRIVER` | `file` | `file` or `postgres` |
+| `OAUTH_STORE_PATH` | `./data/oauth-store.json` | Encrypted single-node file store |
+| `OAUTH_DATABASE_URL` | postgres: required | PostgreSQL connection URL |
+| `OAUTH_CIMD_ENABLED` | `true` | Enable Client ID Metadata Documents |
+| `OAUTH_CIMD_ALLOWED_HOSTS` | empty | Optional CIMD host allowlist |
+| `OAUTH_CIMD_ALLOW_PRIVATE_NETWORK` | `false` | Permit private-network CIMD only when explicitly needed |
+| `OAUTH_CIMD_FETCH_TIMEOUT_MS` | `5000` | CIMD HTTP timeout |
+| `OAUTH_DCR_ENABLED` | `true` | Keep Dynamic Client Registration fallback |
+| `GITLAB_ALLOWED_PROJECTS` | empty | Optional project ID/path allowlist |
+| `GITLAB_WRITE_ENABLED` | `false` | Enable ordinary writes |
+| `GITLAB_MERGE_ENABLED` | `false` | Independently enable MR merge |
 
-See the root `.env.example` for TTL and deployment settings.
+See root `.env.example` for full TTL/server settings.
 
-## OAuth security model
+## PostgreSQL concurrency guarantees
+
+The production backend uses database operations rather than in-memory locking:
+
+- OAuth transaction consume: `DELETE ... RETURNING`.
+- Authorization-code consume: `DELETE ... RETURNING`.
+- Refresh-token rotation: conditional `UPDATE` against the old refresh-token hash.
+
+That means two MCP replicas racing on the same state/code/refresh token cannot both succeed.
+
+## Security model
 
 - Production `PUBLIC_BASE_URL` must use HTTPS.
-- Downstream MCP authorization requires PKCE S256.
-- GitLab authorization also uses PKCE S256.
-- GitLab access and refresh tokens are encrypted at rest with AES-256-GCM.
-- MCP authorization codes, access tokens, and refresh tokens are stored only as SHA-256 hashes.
-- Dynamically registered confidential-client secrets are stored as scrypt hashes.
-- Authorization state and authorization codes are single-use and expire quickly.
+- Downstream MCP OAuth and upstream GitLab OAuth use PKCE S256.
+- GitLab access/refresh tokens are encrypted at rest with AES-256-GCM in both backends.
+- MCP authorization codes, access tokens, and refresh tokens persist only as hashes.
+- OAuth state/code are single-use and short-lived.
 - Read-only OAuth sessions cannot issue non-GET GitLab requests; `gitlab:write` is checked at the GitLab client boundary.
-- Server policy still wins: `GITLAB_WRITE_ENABLED`, `GITLAB_MERGE_ENABLED`, and project allowlists cannot be bypassed by requesting a broader OAuth scope.
+- `GITLAB_WRITE_ENABLED`, `GITLAB_MERGE_ENABLED`, and project allowlists remain authoritative.
+- CIMD metadata cannot redirect and cannot target private networks unless explicitly enabled.
 
-The encrypted store persists to `/data` in the provided Docker Compose configuration. Back it up like a credential database and protect `OAUTH_ENCRYPTION_KEY` separately.
+Protect `OAUTH_ENCRYPTION_KEY` separately from the file volume or PostgreSQL database.
 
 ## Tool groups
 
-Read tools cover the current user, groups, projects, branches, commits, issues, merge requests and diffs, pipelines, jobs, and job traces.
+Read tools include users/groups/projects, branches/commits, repository trees/files, issues, merge requests/diffs, pipelines/jobs/traces.
 
-Write tools cover issue create/update/comment, merge-request create/update/comment, branch creation, and merge. Writes are off by default; merge requires a second explicit flag.
+Write tools include issue/MR operations, branch creation, repository-file commit operations, MR approve/unapprove/discussions, pipeline create/retry/cancel, and MR merge. Writes remain disabled by default; merge requires its own flag.
 
-## Compatibility note
-
-The current MCP specification is moving from Dynamic Client Registration toward Client ID Metadata Documents (CIMD). v0.4 retains DCR for broad client compatibility; CIMD support is planned without removing the existing preregistration/DCR path abruptly.
+The server does not expose a generic GitLab API proxy.
