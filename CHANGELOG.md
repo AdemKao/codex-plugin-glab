@@ -6,6 +6,10 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 
 ## [Unreleased]
 
+### Fixed
+
+- CIMD native-client loopback redirects can now match ChatGPT/Codex-style ephemeral ports when metadata registers a portless `http://127.0.0.1/...` or `http://localhost/...` callback. The exception remains limited to the same loopback host and path with no credentials, query, or fragment; public and explicitly ported redirects remain exact-match only.
+
 ### Planned
 
 - Capability probing and compatibility fixtures across more GitLab Self-Managed versions.
