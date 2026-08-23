@@ -22,61 +22,83 @@ Starting with v0.5.4, this third-party package uses the distinct internal identi
 gitlab-self-hosted
 ```
 
-The old `gitlab` identifier collided with OpenAI's curated GitLab plugin during platform resolution. The user-facing name remains **GitLab Self-Hosted**, but marketplace, folder, and `plugin.json.name` now intentionally match `gitlab-self-hosted`.
+The old `gitlab` identifier collided with OpenAI's curated GitLab plugin during platform resolution. The user-facing name remains **GitLab Self-Hosted**, but marketplace, folder, and `plugin.json.name` intentionally match `gitlab-self-hosted`.
 
-Portable/local plugin reference:
+Portable reference:
 
 ```text
 gitlab-self-hosted@ademkao-codex-plugins
 ```
 
-Generated personal remote reference:
+The portable package is intentionally endpoint-unbound: it contains no `mcpServers`, no automatically loaded `.mcp.json`, and no workspace-specific App binding.
+
+Explicit generated references:
 
 ```text
+gitlab-self-hosted@ademkao-gitlab-local
 gitlab-self-hosted@ademkao-gitlab-remote
+gitlab-self-hosted@ademkao-gitlab-chatgpt
 ```
 
 Do not use the old `gitlab@ademkao-codex-plugins` reference for this repository after upgrading to v0.5.4.
 
-## Portable marketplace vs remote plugin variants
+## Choose an MCP connection explicitly
 
-The portable source plugin keeps `./.mcp.json` pointed at `http://127.0.0.1:3333/mcp` as a same-host Codex fallback. The repository root marketplace, `ademkao-codex-plugins`, installs this portable source package.
+### Local Codex
 
-A remote MCP server that you add and authenticate separately in MCP settings does **not** automatically replace that packaged localhost dependency in ChatGPT.
+When the bundled MCP server runs on the same machine, generate a localhost-bound marketplace:
 
-If you want the plugin itself to use a remote MCP deployment without a ChatGPT
-App/connector ID, build a personal remote marketplace:
+```bash
+python3 scripts/build_local_variant.py
+```
+
+Import/install the generated marketplace and use:
+
+```text
+gitlab-self-hosted@ademkao-gitlab-local
+```
+
+Only this generated variant contains:
+
+```text
+.mcp.json -> http://127.0.0.1:3333/mcp
+```
+
+### Direct remote MCP
+
+For an OCI or other self-hosted deployment, supply the desired public HTTPS endpoint:
 
 ```bash
 python3 scripts/build_personal_variant.py \
   --mcp-url https://gitlab-mcp.example.com/mcp
 ```
 
-Import/install the generated marketplace root and use:
+Import/install the generated marketplace and use:
 
 ```text
 gitlab-self-hosted@ademkao-gitlab-remote
 ```
 
-The generated plugin keeps `mcpServers: "./.mcp.json"`, but points the copied
-`.mcp.json` at the validated remote endpoint. It uses the client's normal OAuth
-flow and does not modify the portable source package.
+The selected URL is validated and written only into the generated artifact. The committed portable plugin remains endpoint-unbound.
 
-If you need a ChatGPT App/connector binding instead, use the workspace-specific
-variant:
+### ChatGPT custom MCP App
 
-1. create/connect the ChatGPT App/connector for the remote HTTPS `/mcp` endpoint;
-2. complete OAuth for that App/connector;
-3. obtain its existing App/connector ID;
-4. run `scripts/build_chatgpt_variant.py` with that ID and remote MCP URL; and
-5. import/install the generated marketplace root.
+For ChatGPT, configure the MCP endpoint on the custom MCP App/connector. The portable plugin does not own or mutate the App's URL.
 
-The generated marketplace is `ademkao-gitlab-chatgpt`, so the generated plugin reference is:
+After the App exists and OAuth is configured, bind a generated plugin marketplace to its App/connector ID:
+
+```bash
+python3 scripts/build_chatgpt_variant.py \
+  --app-id YOUR_EXISTING_WORKSPACE_APP_OR_CONNECTOR_ID \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+Import/install the generated marketplace and use:
 
 ```text
 gitlab-self-hosted@ademkao-gitlab-chatgpt
 ```
 
-Its plugin uses `apps: "./.app.json"` and contains neither `mcpServers` nor `.mcp.json`. This prevents the localhost fallback from competing with the remote App binding.
+The generated ChatGPT plugin uses `apps: "./.app.json"` and contains neither `mcpServers` nor `.mcp.json`. The `--mcp-url` value is validated and recorded as the endpoint expected to already be configured on the referenced App.
 
 See `docs/chatgpt-app.md` for the complete setup, migration, and troubleshooting flow.
