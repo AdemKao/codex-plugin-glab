@@ -30,7 +30,7 @@ Portable reference:
 gitlab-self-hosted@ademkao-codex-plugins
 ```
 
-The portable package is intentionally endpoint-unbound: it contains no `mcpServers`, no automatically loaded `.mcp.json`, and no workspace-specific App binding.
+The portable package is intentionally endpoint-unbound: it contains no `mcpServers`, no automatically loaded `.mcp.json`, and no user/workspace-specific ChatGPT MCP connection binding.
 
 Explicit generated references:
 
@@ -81,17 +81,24 @@ gitlab-self-hosted@ademkao-gitlab-remote
 
 The selected URL is validated and written only into the generated artifact. The committed portable plugin remains endpoint-unbound.
 
-### ChatGPT custom MCP App
+### ChatGPT MCP connection binding
 
-For ChatGPT, configure the MCP endpoint on the custom MCP App/connector. The portable plugin does not own or mutate the App's URL.
+Installing the portable repository plugin and authenticating a remote MCP connection are two separate platform operations. A visible `@GitLab Self-Hosted` plugin does **not** automatically discover or attach a user-specific MCP connection.
 
-After the App exists and OAuth is configured, bind a generated plugin marketplace to its App/connector ID:
+For ChatGPT:
+
+1. Create/connect the remote MCP endpoint in the ChatGPT platform UI using `https://gitlab-mcp.example.com/mcp`.
+2. Complete OAuth and verify that the connection can scan/expose GitLab tools.
+3. Copy the platform-generated **technical ID** of that underlying MCP App/connection exactly.
+4. Generate the connection-bound plugin marketplace:
 
 ```bash
 python3 scripts/build_chatgpt_variant.py \
-  --app-id YOUR_EXISTING_WORKSPACE_APP_OR_CONNECTOR_ID \
+  --connection-id YOUR_CHATGPT_MCP_CONNECTION_TECHNICAL_ID \
   --mcp-url https://gitlab-mcp.example.com/mcp
 ```
+
+`--app-id` remains accepted as a backwards-compatible alias for `--connection-id`.
 
 Import/install the generated marketplace and use:
 
@@ -99,6 +106,8 @@ Import/install the generated marketplace and use:
 gitlab-self-hosted@ademkao-gitlab-chatgpt
 ```
 
-The generated ChatGPT plugin uses `apps: "./.app.json"` and contains neither `mcpServers` nor `.mcp.json`. The `--mcp-url` value is validated and recorded as the endpoint expected to already be configured on the referenced App.
+The generated ChatGPT plugin uses `apps: "./.app.json"` and contains neither `mcpServers` nor `.mcp.json`. The `--mcp-url` value is only validated/recorded as the endpoint expected on the existing connection; the actual plugin dependency is the connection technical ID.
+
+Generating the artifact does not create the MCP connection, run OAuth, or modify an already-installed portable plugin. You must import/install the generated marketplace explicitly.
 
 See `docs/chatgpt-app.md` for the complete setup, migration, and troubleshooting flow.

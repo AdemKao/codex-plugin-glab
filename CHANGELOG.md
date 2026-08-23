@@ -13,6 +13,27 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 - Observability, audit events, and operational metrics for hosted deployments.
 - Additional GitLab release/member/milestone workflows.
 
+## [0.5.6] - 2026-08-23
+
+### Fixed
+
+- Corrected the ChatGPT setup model after reproducing the case where the repository plugin is visible and OAuth completes successfully, but the conversation still has no GitLab tools because the portable plugin is not bound to that authenticated MCP connection.
+- Reframed the ChatGPT helper around an existing **MCP App/connection technical ID** rather than implying that installing the plugin repository creates or automatically attaches a separate App.
+- Added the preferred `--connection-id` option to `scripts/build_chatgpt_variant.py`; `--app-id` remains a backwards-compatible alias.
+- Generated `.chatgpt-setup.json` now records `connection_id`, explicitly states that the helper does not create the MCP connection or run OAuth, and no longer claims that explicit ChatGPT App creation is performed by the helper.
+
+### Changed
+
+- ChatGPT setup documentation now separates four layers: portable plugin, native/direct MCP connection, ChatGPT MCP App/connection, and the generated connection-bound plugin variant.
+- Plugin README, Traditional Chinese documentation, and the `gitlab-setup` skill now explain that `Authentication complete` proves the OAuth callback succeeded but does not prove the portable plugin acquired a tool binding.
+- Added `scripts/validate_chatgpt_binding.py` and CI coverage for the preferred `--connection-id` flow, generated `.app.json`, connection metadata, and the legacy `--app-id` alias.
+- Synchronized `VERSION`, plugin manifest, MCP package, and MCP runtime-reported version at v0.5.6.
+
+### Security
+
+- User/workspace-specific MCP connection technical IDs remain outside the portable public plugin and are written only to generated marketplace output.
+- Remote MCP URL validation remains unchanged: ChatGPT binding generation still requires a public HTTPS `/mcp` URL and rejects unsafe local/private/credential-bearing targets.
+
 ## [0.5.5] - 2026-08-23
 
 ### Fixed

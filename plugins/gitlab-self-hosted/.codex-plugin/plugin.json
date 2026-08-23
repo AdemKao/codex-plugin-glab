@@ -1,6 +1,6 @@
 {
   "name": "gitlab-self-hosted",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "Inspect and operate GitLab projects through the bundled production-oriented self-hosted MCP server with safe shared-token or per-user OAuth workflows for Codex and ChatGPT.",
   "author": {
     "name": "AdemKao",
@@ -27,7 +27,7 @@
   "interface": {
     "displayName": "GitLab Self-Hosted",
     "shortDescription": "Self-hosted GitLab MCP with OAuth and CIMD",
-    "longDescription": "Use the bundled self-hosted GitLab MCP server to inspect projects, review merge requests, manage issues, operate repository files and pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed. The portable plugin intentionally does not bind an MCP endpoint: configure the appropriate local, remote, or ChatGPT App connection for your environment. The distinct gitlab-self-hosted package identifier avoids collision with the OpenAI-curated GitLab plugin.",
+    "longDescription": "Use the bundled self-hosted GitLab MCP server to inspect projects, review merge requests, manage issues, operate repository files and pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed. The portable plugin intentionally does not bind an MCP endpoint or a user-specific ChatGPT MCP connection: configure the appropriate local, remote, or ChatGPT connection-bound variant for your environment. The distinct gitlab-self-hosted package identifier avoids collision with the OpenAI-curated GitLab plugin.",
     "developerName": "AdemKao",
     "category": "Developer Tools",
     "capabilities": [
