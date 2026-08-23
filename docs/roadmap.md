@@ -45,31 +45,34 @@ Completed:
 - pipeline create/retry/cancel tools;
 - Docker Compose PostgreSQL profile and migration documentation.
 
-## v0.5.1 — Initial workspace binding helper
+## v0.5.1–v0.5.6 — Installation and binding experiments
+
+Completed across these releases:
+
+- remote MCP doctor and public HTTPS `/mcp` URL validation;
+- direct MCP OAuth installation guidance;
+- workspace/App binding helper experiments;
+- package identity migration to `gitlab-self-hosted`;
+- local, custom-remote, and App-bound generated variants;
+- ChatGPT MCP connection-ID compatibility helpers;
+- regression coverage for unsafe URL rejection and generated binding artifacts.
+
+These releases exposed an important UX problem: a marketplace-root plugin that did not carry its own direct remote MCP binding still forced users to configure or generate a second binding layer before the plugin could expose GitLab tools.
+
+## v0.5.7 — Hosted MCP as the marketplace-root default
 
 Completed:
 
-- live remote MCP doctor for Protected Resource Metadata, Authorization Server Metadata, and unauthenticated `/mcp` OAuth challenge checks;
-- public HTTPS `/mcp` URL validation with unsafe target rejection;
-- an initial workspace-specific `.app.json` binding generator;
-- preserved localhost `.mcp.json` for local Codex;
-- CI coverage for helper generation and unsafe URL rejection.
-
-v0.5.2 refines the product positioning introduced in v0.5.1 so that this optional binding helper is no longer presented as the primary personal/Codex installation path or as an OpenAI native App Template.
-
-## v0.5.2 — Direct Codex MCP / OAuth installation UX
-
-Completed:
-
-- personal/Codex remote setup now explicitly follows **Add server -> Streamable HTTP -> remote HTTPS `/mcp` -> OAuth discovery/authentication**;
-- direct remote OAuth no longer requires `.app.json`, a workspace app/connector ID, or `build_chatgpt_variant.py`;
-- portable `plugins/gitlab/.mcp.json` remains the localhost `http://127.0.0.1:3333/mcp` fallback for same-host local use;
-- moved the helper input from `app-template/.app.json.example` to `workspace-binding/.app.json.example` to remove App Template ambiguity;
-- repositioned `build_chatgpt_variant.py` as an optional **workspace binding helper** that requires an existing workspace app/connector ID;
-- generated helper metadata and CI validation explicitly state that the output is not an OpenAI managed App Template;
-- documented managed workspace App Templates as a separate administrator/platform feature rather than a repository-provided template;
-- synchronized English / Traditional Chinese README, ChatGPT/Codex setup docs, setup skill, capability matrix, roadmap, and changelog;
-- synchronized `VERSION`, plugin manifest, MCP package, and MCP runtime version to `0.5.2`.
+- repository-root `gitlab-self-hosted` now ships `mcpServers: "./.mcp.json"`;
+- committed `.mcp.json` points directly to `https://gitlab-mcp.blacmarcs.com/mcp`;
+- normal ChatGPT/Codex installation becomes root marketplace -> remote HTTPS MCP -> OAuth;
+- no local MCP process, generated marketplace variant, second repository, or ChatGPT connection technical ID is required for the default path;
+- `build_local_variant.py` is retained as a development-only override to `http://127.0.0.1:3333/mcp`;
+- `build_personal_variant.py` is retained as an optional custom-remote override;
+- `build_chatgpt_variant.py` is retained as an optional existing-App/connection compatibility path and removes the source direct MCP binding in generated output;
+- validators lock the hosted root endpoint and test all override invariants;
+- English / Traditional Chinese installation docs, capability matrix, setup skill, and changelog are synchronized;
+- release metadata is synchronized at `0.5.7`.
 
 ## v0.6 — Policy, observability, and compatibility
 
