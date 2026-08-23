@@ -2,7 +2,7 @@
 
 [English](capability-matrix.md) | [繁體中文](capability-matrix.zh-TW.md)
 
-## v0.5.1 Server capabilities
+## v0.5.2 Server capabilities
 
 | Capability | Bundled MCP Server | 說明 |
 | --- | --- | --- |
@@ -26,7 +26,7 @@
 
 ## Authentication / deployment
 
-| Capability | v0.5.1 |
+| Capability | v0.5.2 |
 | --- | --- |
 | Shared service identity | 支援 (`MCP_AUTH_MODE=shared-token`) |
 | Per-user GitLab OAuth | 支援 (`MCP_AUTH_MODE=oauth`) |
@@ -45,22 +45,29 @@
 | GitLab token 自動 refresh | 支援 |
 | Docker Compose PostgreSQL profile | 支援 |
 | PostgreSQL CI integration tests | 支援 |
-| ChatGPT remote URL validator | 支援 | 只允許安全的 HTTPS `/mcp` remote profile |
-| ChatGPT live MCP doctor | 支援 | 驗證 OAuth metadata 與未登入 challenge |
-| Workspace-specific `.app.json` generator | 支援 | 需要已由 ChatGPT workspace 建立的 App/connector ID |
-| 安裝 plugin 時自動建立任意 ChatGPT Custom MCP App | 不支援 | 這是平台 consent/admin boundary，不應由 repo 靜默繞過 |
+| Remote HTTPS `/mcp` validator | 支援 | 拒絕不安全 local/private literal target |
+| Live remote OAuth MCP doctor | 支援 | 驗證 OAuth metadata 與未登入 challenge |
+| Personal/Codex **Add server -> remote HTTPS `/mcp` -> OAuth discovery** | 支援 | Remote self-host 建議安裝路徑 |
+| Localhost `.mcp.json` | 支援 | Local Codex fallback：`http://127.0.0.1:3333/mcp` |
+| Workspace-specific `.app.json` binding helper | 支援 | 需要已存在的 ChatGPT App/connector ID |
+| OpenAI-native managed workspace App Template generator | 不支援 | 這是平台/admin 功能；本 repo 不定義也不模擬 |
+| 安裝 plugin 時自動建立任意 ChatGPT App | 不支援 | 平台 consent/admin boundary |
 
 ## Client surfaces
 
 | Surface | Integration path |
 | --- | --- |
-| Codex | Portable plugin + localhost/remote bundled MCP；必要時 local `git` / `glab` fallback |
-| ChatGPT | Public HTTPS MCP -> 明確 Custom MCP App creation/consent -> generated workspace app-bound plugin variant |
+| Personal / Codex remote | **Add server** -> remote HTTPS `/mcp` -> OAuth discovery -> GitLab browser authorization |
+| Codex local fallback | Portable plugin `.mcp.json` -> `http://127.0.0.1:3333/mcp`；working tree 由 local `git` / `glab` 處理 |
+| ChatGPT existing App/connector | Public HTTPS `/mcp` -> 明確 App/connector provisioning -> 可選 `build_chatgpt_variant.py` workspace binding helper |
+| ChatGPT managed workspace App Template | 使用平台/admin provisioning 功能（若 workspace 提供）；指向已驗證 HTTPS `/mcp`；不是由本 repo 產生 |
 | 其他 MCP client | `/mcp` + shared bearer 或 OAuth discovery / CIMD / DCR |
 
-Portable source `.mcp.json` 會保留 `http://127.0.0.1:3333/mcp` 給 local Codex。ChatGPT remote binding 透過 `scripts/chatgpt_mcp_doctor.py` 與 `scripts/build_chatgpt_variant.py --app-id ... --mcp-url https://.../mcp` 完成，不修改 source localhost 設定。
+Portable source `.mcp.json` 保留 `http://127.0.0.1:3333/mcp` 作為 local fallback。Personal/Codex remote 安裝不需要修改這個檔案：直接在 client **Add server** 加入公開 HTTPS endpoint，讓 OAuth discovery 從 MCP `401` challenge 開始。
 
-Client 產品可用性、plan limit、approval UI 與 write permission 由各 MCP client 控制，可能獨立於本 repo 改變。
+`scripts/build_chatgpt_variant.py` 與 `plugins/gitlab/workspace-binding/.app.json.example` 是針對**既有** ChatGPT App/connector 的 workspace binding helper，不是 OpenAI-native App Template implementation。
+
+Client 產品可用性、plan limit、approval UI、managed workspace provisioning 與 write permission 由各 MCP client / platform 控制，可能獨立於本 repo 改變。
 
 ## Policy layers
 
