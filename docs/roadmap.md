@@ -8,53 +8,64 @@ Completed:
 
 - bundled TypeScript MCP server;
 - GitLab.com / Self-Managed host selection;
-- server-side PAT / bearer authentication to GitLab REST API;
-- read tools for projects, groups, issues, merge requests, branches, commits, pipelines, jobs, and traces;
+- server-side PAT / bearer authentication;
+- core project/group/issue/MR/repository/CI reads;
 - controlled issue/MR/branch writes and MR merge;
-- project allowlist;
-- read-only and merge-off safety defaults;
-- MCP endpoint bearer protection;
-- Docker / Compose deployment;
-- tests, build validation, and automated release workflow.
+- project allowlist and conservative write/merge defaults;
+- Docker deployment, tests, and release automation.
 
 ## v0.4.0 — Per-user identity and OAuth
 
 Completed:
 
-- built-in MCP Protected Resource Metadata and OAuth authorization-server discovery;
-- per-user GitLab OAuth identity/token mapping;
-- downstream authorization-code + PKCE S256;
-- independent upstream GitLab authorization-code + PKCE S256;
-- Dynamic Client Registration compatibility;
-- MCP access/refresh token issuance and rotation;
-- automatic GitLab refresh-token handling;
-- encrypted persistent OAuth state;
-- independent `gitlab:read` / `gitlab:write` authorization with server-side policy still authoritative;
-- Docker persistence for the encrypted single-node OAuth store;
-- backward-compatible shared-token mode.
+- Protected Resource Metadata and Authorization Server Metadata;
+- per-user GitLab OAuth identity mapping;
+- downstream and upstream PKCE S256;
+- DCR compatibility;
+- MCP access/refresh tokens and rotation;
+- automatic GitLab token refresh;
+- encrypted single-node OAuth persistence;
+- independent `gitlab:read` / `gitlab:write` scope enforcement.
 
-## v0.5 — OAuth interoperability and deeper GitLab workflows
+## v0.5.0 — Production OAuth and deeper GitLab workflows
+
+Completed:
+
+- Client ID Metadata Documents (CIMD) support with DCR fallback;
+- CIMD SSRF/redirect/size/timeout/host validation;
+- pluggable OAuth store contract;
+- encrypted PostgreSQL OAuth/session backend;
+- cross-replica atomic state and authorization-code consumption;
+- atomic refresh-token rotation;
+- concurrent GitLab token-refresh recovery;
+- PostgreSQL 17 CI integration tests;
+- full OAuth authorize/callback/token/refresh smoke tests;
+- repository tree/file read and file create/update/delete tools;
+- MR approve/unapprove/discussion tools;
+- pipeline create/retry/cancel tools;
+- Docker Compose PostgreSQL profile and migration documentation.
+
+## v0.6 — Policy, observability, and compatibility
 
 Planned candidates:
 
-- Client ID Metadata Documents (CIMD) alongside the existing DCR compatibility path;
-- transactional/shared OAuth storage backend for HA and multiple replicas;
-- repository file reads/writes;
-- commit creation through GitLab API where appropriate;
-- MR approval/review APIs;
-- pipeline retry/cancel/trigger tools;
-- labels, milestones, releases, and members;
-- more granular project/tool policy configuration.
+- per-tool policy allow/deny configuration;
+- group/project-scoped policy rules beyond a flat allowlist;
+- audit events for OAuth sign-in, write tools, destructive tools, and merge actions;
+- Prometheus/OpenTelemetry-compatible operational metrics;
+- rate-limit/backpressure visibility;
+- GitLab Self-Managed version compatibility fixtures and capability probing;
+- labels, milestones, releases, members, and additional CI/CD operations;
+- hardened secret/key rotation procedures for hosted deployments.
 
 ## Compatibility and quality
 
 Ongoing:
 
-- fixtures for GitLab Self-Managed versions;
-- live OAuth interoperability testing against GitLab.com and representative Self-Managed releases;
+- live OAuth interoperability testing against GitLab.com and representative Self-Managed versions;
 - API capability probing;
-- contract tests for tool schemas and OAuth endpoints;
-- security review of authorization, encrypted persistence, and write boundaries;
-- documentation parity between English and Traditional Chinese.
+- tool schema and OAuth endpoint contract tests;
+- security review of authorization, CIMD metadata fetching, encrypted persistence, and write boundaries;
+- English / Traditional Chinese documentation parity.
 
-The GitLab native MCP server remains an optional alternative/backend path, not a dependency.
+GitLab native MCP remains an optional alternative, not a dependency.

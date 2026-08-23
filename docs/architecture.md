@@ -7,140 +7,124 @@
 `codex-plugin-glab` has two first-class runtime pieces:
 
 1. **Plugin layer** — Codex/ChatGPT workflow guidance, routing, safety rules, and local `git` / `glab` fallbacks.
-2. **Self-hosted MCP server** — an HTTP MCP server that exposes explicit GitLab tools and calls GitLab REST API v4.
+2. **Self-hosted MCP server** — explicit GitLab MCP tools backed by GitLab REST API v4.
 
 ```text
 ChatGPT / Codex / MCP client
             |
-            | MCP + shared bearer or OAuth
+            | MCP + OAuth or shared bearer
             v
-+---------------------------------------+
-| Self-hosted MCP server                |
-| packages/mcp-server                   |
-|                                       |
-| OAuth / shared-token auth boundary    |
-| request-scoped GitLab identity        |
-| tool schemas + validation             |
-| project allowlist                     |
-| read/write/merge policy               |
-| GitLab REST API client                |
-+-------------------+-------------------+
-                    |
-                    | HTTPS / GitLab REST API v4
-                    v
-          GitLab.com / Self-Managed
++-------------------------------------------+
+| Self-hosted MCP server                    |
+|                                           |
+| Protected Resource Metadata               |
+| OAuth Authorization Server                |
+| CIMD resolver + DCR compatibility         |
+| request-scoped GitLab identity            |
+| tool schemas + project/write policy       |
++---------------------+---------------------+
+                      |
+                      | GitLab REST API v4
+                      v
+            GitLab.com / Self-Managed
+
+OAuth persistence
+  single replica  -> AES-GCM encrypted file
+  multi replica   -> PostgreSQL + encrypted payloads
 ```
 
-GitLab native MCP is optional. The bundled server does not depend on it.
+GitLab native MCP is optional; the bundled server does not depend on it.
 
 ## Authentication architecture
 
-### Shared-token mode
+### Shared-token
 
 ```text
-MCP client
-   | MCP_AUTH_TOKEN
-   v
-MCP server
-   | GITLAB_TOKEN
-   v
-GitLab
+MCP client --MCP_AUTH_TOKEN--> MCP server --GITLAB_TOKEN--> GitLab
 ```
 
-One configured GitLab identity is shared by the deployment. This keeps the v0.3 operational model intact.
+One GitLab identity is shared by the deployment.
 
-### Per-user OAuth mode
+### Per-user OAuth
 
 ```text
 MCP client
    |
-   | OAuth discovery / PKCE
+   | OAuth discovery
+   | CIMD client_id metadata or DCR
+   | authorization code + PKCE
    v
-MCP OAuth gateway
+codex-plugin-glab OAuth gateway
    |
-   | GitLab OAuth / independent PKCE
+   | independent GitLab authorization code + PKCE
    v
-GitLab authorization server
+GitLab OAuth
    |
-   | user-scoped GitLab access + refresh tokens
+   | user-scoped access/refresh token
    v
-Encrypted OAuth store
+OAuth store
    |
    | request-scoped credential via AsyncLocalStorage
    v
 GitLab REST client
 ```
 
-The MCP server is both the protected resource and the downstream authorization server/gateway. It exposes Protected Resource Metadata so MCP clients can discover authorization without receiving a GitLab PAT.
+The server is both the MCP protected resource and its downstream authorization server. GitLab credentials never need to be given to the MCP client.
 
-After authorization, the GitLab credential is attached to the current MCP request through Node `AsyncLocalStorage`. The tool layer and GitLab client therefore use the current user's identity without storing that identity in global mutable state.
+## Client registration
 
-## OAuth persistence
+v0.5 prefers **Client ID Metadata Documents (CIMD)** when the MCP client supports them and retains **Dynamic Client Registration (DCR)** for compatibility.
 
-The built-in v0.4 store persists:
+CIMD metadata resolution is isolated from tool execution and includes an SSRF boundary: HTTPS only, exact `client_id` matching, no redirects, bounded size/time, optional host allowlists, and private-network blocking by default.
 
-- dynamically registered MCP OAuth clients;
-- pending authorization transactions;
-- one-time authorization codes;
-- MCP sessions;
-- encrypted GitLab OAuth access/refresh tokens.
+## OAuth storage abstraction
 
-The whole store is encrypted with AES-256-GCM. MCP bearer tokens and authorization codes are persisted only as hashes.
+The OAuth gateway depends on `OAuthStoreBackend`, not a concrete persistence implementation.
 
-The file store is intentionally single-node. Multi-replica/HA deployment requires a future transactional shared storage adapter rather than sharing one writable JSON file.
+### File backend
 
-## Trust boundaries
+The encrypted file backend is intentionally single-process/single-node. It uses AES-256-GCM plus atomic file replacement and defensive copies so application code cannot mutate stored state without an explicit store operation.
 
-### MCP client -> MCP server
+### PostgreSQL backend
 
-In shared-token mode, remote clients use `MCP_AUTH_TOKEN` or a separately trusted boundary.
+The production backend stores encrypted payloads in PostgreSQL and uses hashed token lookup columns. It is designed for multiple MCP replicas.
 
-In OAuth mode, unauthenticated `/mcp` requests return OAuth discovery information. The client completes authorization-code + PKCE and receives a server-issued MCP access token.
+Cross-replica one-time semantics are enforced in the database:
 
-### MCP server -> GitLab
+```text
+OAuth state         -> DELETE ... RETURNING
+Authorization code  -> DELETE ... RETURNING
+Refresh rotation    -> conditional UPDATE using old refresh-token hash
+```
 
-In shared-token mode the server uses the configured GitLab token.
+No process-local mutex is required for those guarantees.
 
-In OAuth mode the server uses the current user's GitLab OAuth token and refreshes it when needed. GitLab credentials are never embedded in the plugin package or returned as MCP data.
+## Request identity
 
-The server only calls explicit REST API routes needed by registered tools; it is not an arbitrary GitLab API proxy.
+After OAuth authentication, the GitLab access token and effective MCP scopes are attached to the current request through Node `AsyncLocalStorage`. Both the original tool registry and v0.5 repository/MR/pipeline tools use the same request-scoped `GitLabClient`.
 
 ## Policy layers
 
-Project operations pass through `GITLAB_ALLOWED_PROJECTS` when configured.
+A write is allowed only when all applicable layers permit it:
 
-Write operations require the server setting:
+1. OAuth session has `gitlab:write` (OAuth mode);
+2. `GITLAB_WRITE_ENABLED=true`;
+3. `GITLAB_ALLOWED_PROJECTS` permits the project, if configured;
+4. GitLab itself permits the current user;
+5. MR merge additionally requires `GITLAB_MERGE_ENABLED=true`.
 
-```text
-GITLAB_WRITE_ENABLED=true
-```
-
-In OAuth mode they additionally require:
-
-```text
-gitlab:write
-```
-
-Merge additionally requires:
-
-```text
-GITLAB_MERGE_ENABLED=true
-```
-
-GitLab's own project permissions are the final authorization layer. This means a request succeeds only when the client scope, deployment policy, project allowlist, and GitLab identity all permit it.
+Repository-file deletion and pipeline cancellation are marked destructive. The server exposes explicit operations, not a generic GitLab API proxy.
 
 ## Local repository workflows
-
-The MCP server handles remote GitLab state. Local commit/push workflows remain in the plugin/client environment:
 
 ```text
 remote GitLab reads/writes -> MCP server
 local working tree         -> git
-local GitLab CLI fallback  -> glab
+local commit/push          -> git / glab
 ```
 
-This separates remote credentials/API operations from local filesystem mutation.
+Remote API credentials therefore remain separated from local filesystem mutation.
 
-## Registration compatibility
+## Operational scaling
 
-v0.4 supports Dynamic Client Registration because it remains useful for existing MCP clients. Current MCP specifications are moving toward Client ID Metadata Documents (CIMD); the architecture keeps OAuth registration separate from tool execution so CIMD can be added without rewriting GitLab tools.
+For one replica, `OAUTH_STORE_DRIVER=file` is sufficient. For HA/horizontal scaling, use `OAUTH_STORE_DRIVER=postgres` and a common `OAUTH_ENCRYPTION_KEY` across replicas. Store that key separately from PostgreSQL backups.

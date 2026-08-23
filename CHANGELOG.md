@@ -8,10 +8,46 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 
 ### Planned
 
-- Client ID Metadata Documents (CIMD) support as the long-term replacement for Dynamic Client Registration.
-- Additional repository file/write and MR review/approval tools.
-- Broader GitLab Self-Managed compatibility fixtures.
-- Capability probing across GitLab versions.
+- Capability probing and compatibility fixtures across more GitLab Self-Managed versions.
+- More granular per-tool and per-project authorization policy.
+- Observability, audit events, and operational metrics for hosted deployments.
+- Additional GitLab release/member/milestone workflows.
+
+## [0.5.0] - 2026-08-23
+
+### Added
+
+- MCP Client ID Metadata Documents (CIMD) support while retaining Dynamic Client Registration as a compatibility fallback.
+- CIMD security controls: HTTPS-only client IDs, exact `client_id` matching, redirect validation, response-size limits, bounded caching, optional hostname allowlists, and DNS/private-network SSRF protection.
+- Pluggable OAuth persistence through a common store interface.
+- PostgreSQL-backed OAuth persistence for multi-replica deployments with encrypted record payloads.
+- Atomic PostgreSQL consumption of OAuth state and authorization codes through `DELETE ... RETURNING`.
+- Atomic MCP refresh-token rotation through conditional updates so the same refresh token cannot succeed on two replicas.
+- PostgreSQL migration/schema and an optional Docker Compose PostgreSQL profile.
+- CI PostgreSQL 17 integration tests that exercise concurrent state/code consumption and refresh-token rotation.
+- Full OAuth smoke coverage for authorize -> GitLab callback -> MCP token -> authenticated session -> refresh rotation.
+- Repository tree/file read tools plus repository file create/update/delete tools.
+- Merge-request approve/unapprove and discussion tools.
+- Pipeline create/retry/cancel tools.
+
+### Changed
+
+- The MCP runtime now targets Node.js 22 or newer.
+- OAuth storage defaults to the encrypted file backend for backward compatibility; `OAUTH_STORE_DRIVER=postgres` is recommended for horizontally scaled production deployments.
+- Authorization-server metadata now advertises `client_id_metadata_document_supported` when CIMD is enabled.
+- OAuth gateway persistence is asynchronous so file and PostgreSQL backends use the same authorization flow.
+- GitLab token refresh can recover when another replica has already refreshed the same session.
+- CI now starts PostgreSQL and validates the production OAuth storage path in addition to repository validation, TypeScript strict build, and Docker build.
+
+### Security
+
+- CIMD metadata fetching rejects redirects and private/loopback/link-local targets by default to reduce SSRF risk.
+- CIMD document size and fetch time are bounded.
+- GitLab OAuth tokens remain encrypted at rest for both file and PostgreSQL stores.
+- MCP access/refresh tokens and authorization codes remain persisted as hashes only.
+- Repository, MR, and pipeline write tools still require both server-wide write policy and `gitlab:write` in OAuth mode.
+- File deletion and pipeline cancellation are marked destructive; MR merge remains separately gated by `GITLAB_MERGE_ENABLED`.
+- The server continues to expose explicit tools rather than a generic arbitrary GitLab API proxy.
 
 ## [0.4.0] - 2026-08-23
 

@@ -1,17 +1,24 @@
 export type GitLabTokenType = "private-token" | "bearer";
 export type McpAuthMode = "shared-token" | "oauth";
+export type OAuthStoreDriver = "file" | "postgres";
 
 export interface OAuthConfig {
   publicBaseUrl: string;
   gitlabClientId: string;
   gitlabClientSecret: string;
+  storeDriver: OAuthStoreDriver;
   storePath: string;
+  databaseUrl?: string;
   encryptionKey: Buffer;
   transactionTtlSeconds: number;
   authorizationCodeTtlSeconds: number;
   accessTokenTtlSeconds: number;
   refreshTokenTtlSeconds: number;
   dcrEnabled: boolean;
+  cimdEnabled: boolean;
+  cimdAllowedHosts: Set<string>;
+  cimdAllowPrivateNetwork: boolean;
+  cimdFetchTimeoutMs: number;
 }
 
 export interface ServerConfig {
@@ -156,19 +163,34 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     throw new Error("GITLAB_OAUTH_CLIENT_ID and GITLAB_OAUTH_CLIENT_SECRET are required in oauth mode");
   }
 
+  const storeDriver = (env.OAUTH_STORE_DRIVER ?? "file").toLowerCase();
+  if (storeDriver !== "file" && storeDriver !== "postgres") {
+    throw new Error("OAUTH_STORE_DRIVER must be file or postgres");
+  }
+  const databaseUrl = env.OAUTH_DATABASE_URL?.trim();
+  if (storeDriver === "postgres" && !databaseUrl) {
+    throw new Error("OAUTH_DATABASE_URL is required when OAUTH_STORE_DRIVER=postgres");
+  }
+
   return {
     ...base,
     oauth: {
       publicBaseUrl,
       gitlabClientId,
       gitlabClientSecret,
+      storeDriver,
       storePath: env.OAUTH_STORE_PATH?.trim() || "./data/oauth-store.json",
+      ...(databaseUrl ? { databaseUrl } : {}),
       encryptionKey: parseEncryptionKey(env.OAUTH_ENCRYPTION_KEY),
       transactionTtlSeconds: parsePositiveInteger(env.OAUTH_TRANSACTION_TTL_SECONDS, 600, "OAUTH_TRANSACTION_TTL_SECONDS"),
       authorizationCodeTtlSeconds: parsePositiveInteger(env.OAUTH_CODE_TTL_SECONDS, 300, "OAUTH_CODE_TTL_SECONDS"),
       accessTokenTtlSeconds: parsePositiveInteger(env.OAUTH_ACCESS_TOKEN_TTL_SECONDS, 3600, "OAUTH_ACCESS_TOKEN_TTL_SECONDS"),
       refreshTokenTtlSeconds: parsePositiveInteger(env.OAUTH_REFRESH_TOKEN_TTL_SECONDS, 2592000, "OAUTH_REFRESH_TOKEN_TTL_SECONDS"),
       dcrEnabled: parseBoolean(env.OAUTH_DCR_ENABLED, true),
+      cimdEnabled: parseBoolean(env.OAUTH_CIMD_ENABLED, true),
+      cimdAllowedHosts: parseCsv(env.OAUTH_CIMD_ALLOWED_HOSTS),
+      cimdAllowPrivateNetwork: parseBoolean(env.OAUTH_CIMD_ALLOW_PRIVATE_NETWORK, false),
+      cimdFetchTimeoutMs: parsePositiveInteger(env.OAUTH_CIMD_FETCH_TIMEOUT_MS, 5000, "OAUTH_CIMD_FETCH_TIMEOUT_MS"),
     },
   };
 }

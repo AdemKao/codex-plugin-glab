@@ -2,7 +2,7 @@
 
 [English](authentication.md) | [繁體中文](authentication.zh-TW.md)
 
-v0.4.0 supports two authentication models. Choose one deliberately; do not mix their credentials unless you are migrating.
+v0.5.0 supports two authentication models. Choose one deliberately.
 
 ## Shared-token mode
 
@@ -11,17 +11,10 @@ MCP_AUTH_MODE=shared-token
 GITLAB_HOST=https://gitlab.com
 GITLAB_TOKEN=...
 GITLAB_TOKEN_TYPE=private-token
-```
-
-For a non-loopback bind, also configure:
-
-```bash
 MCP_AUTH_TOKEN=a-long-random-secret
 ```
 
-This is the v0.3-compatible model. The configured GitLab token represents one GitLab identity for the whole MCP server. It is appropriate for personal deployments, CI/service accounts, or a trusted workspace intentionally using one service identity.
-
-`MCP_ALLOW_INSECURE_NO_AUTH=true` disables the built-in shared-mode remote-auth guard. Use it only when a separate trusted gateway or private tunnel already authenticates every request.
+One configured GitLab identity represents the whole MCP server. Use this for personal deployments, CI/service identities, or deliberately trusted shared workspaces.
 
 ## Per-user OAuth mode
 
@@ -32,106 +25,131 @@ GITLAB_HOST=https://gitlab.com
 GITLAB_OAUTH_CLIENT_ID=...
 GITLAB_OAUTH_CLIENT_SECRET=...
 OAUTH_ENCRYPTION_KEY="$(openssl rand -base64 32)"
-OAUTH_STORE_PATH=/data/oauth-store.json
 ```
 
-In this mode, `GITLAB_TOKEN` and `MCP_AUTH_TOKEN` are not the identity path. Each MCP user authorizes their own GitLab account.
-
-### GitLab OAuth Application
-
-Create one GitLab OAuth Application for the MCP deployment. Register this callback exactly:
+Each MCP user authorizes their own GitLab account. Create the GitLab OAuth Application on the same GitLab instance selected by `GITLAB_HOST` and register exactly:
 
 ```text
 https://gitlab-mcp.example.com/oauth/gitlab/callback
 ```
 
-For GitLab Self-Managed, create the OAuth Application on that GitLab instance and point `GITLAB_HOST` to the same instance.
+The server maps downstream scopes to GitLab scopes:
 
-The server requests upstream GitLab scopes based on the downstream MCP scope:
-
-| MCP OAuth scope | GitLab OAuth scopes | Effective capability |
+| MCP scope | GitLab scopes | Effective capability |
 | --- | --- | --- |
-| `gitlab:read` | `read_api read_user` | read tools only |
+| `gitlab:read` | `read_api read_user` | read tools |
 | `gitlab:write` | `api read_user` | write-capable session, still limited by server policy |
 
-`gitlab:read` is always present. `gitlab:write` cannot be requested when `GITLAB_WRITE_ENABLED=false`.
+`gitlab:read` is always present. `gitlab:write` is unavailable when `GITLAB_WRITE_ENABLED=false`.
 
-### MCP OAuth discovery
+## OAuth discovery and client registration
 
-OAuth mode exposes:
+OAuth mode exposes Protected Resource Metadata and Authorization Server Metadata plus `/oauth/authorize`, `/oauth/token`, and the GitLab callback.
 
-```text
-/.well-known/oauth-protected-resource
-/.well-known/oauth-authorization-server
-/oauth/register
-/oauth/authorize
-/oauth/token
-/oauth/gitlab/callback
+v0.5 supports two client-registration paths:
+
+### CIMD — preferred
+
+A modern MCP client can use an HTTPS Client ID Metadata Document URL directly as `client_id`.
+
+The server verifies:
+
+- HTTPS URL with a non-root path;
+- metadata `client_id` exactly equals the requested URL;
+- declared redirect URI exactly matches the request;
+- supported response/grant type;
+- public client mode (`token_endpoint_auth_method=none`) in v0.5;
+- no HTTP redirect while fetching metadata;
+- document-size and timeout limits;
+- DNS/IP does not resolve to loopback/private/link-local networks unless explicitly enabled.
+
+Optional controls:
+
+```bash
+OAUTH_CIMD_ENABLED=true
+OAUTH_CIMD_ALLOWED_HOSTS=client.example.com
+OAUTH_CIMD_ALLOW_PRIVATE_NETWORK=false
+OAUTH_CIMD_FETCH_TIMEOUT_MS=5000
 ```
 
-An unauthenticated `/mcp` request returns `401` and a `WWW-Authenticate` header that points to Protected Resource Metadata. Compatible clients can then discover the authorization server and start authorization automatically.
+### DCR — compatibility fallback
 
-### Authorization flow
+`/oauth/register` remains available when:
+
+```bash
+OAUTH_DCR_ENABLED=true
+```
+
+DCR client secrets are stored as scrypt hashes. New deployments should prefer CIMD where the MCP client supports it.
+
+## Authorization flow
 
 ```text
 MCP client
   -> Protected Resource Metadata
-  -> authorization-server metadata
-  -> optional Dynamic Client Registration
+  -> Authorization Server Metadata
+  -> CIMD client metadata OR DCR
   -> /oauth/authorize + PKCE S256
   -> GitLab /oauth/authorize + independent PKCE S256
   -> /oauth/gitlab/callback
   -> one-time MCP authorization code
-  -> /oauth/token + downstream PKCE verifier
-  -> MCP access + refresh token
+  -> /oauth/token + PKCE verifier
+  -> MCP access + rotating refresh token
   -> /mcp as that GitLab user
 ```
 
-The server includes `iss` in downstream authorization responses. Current MCP clients may use Dynamic Client Registration. The MCP specification is moving toward Client ID Metadata Documents (CIMD), so DCR is a compatibility path rather than the long-term only registration mechanism.
+## OAuth persistence
+
+Choose one backend.
+
+### Encrypted file store
+
+```bash
+OAUTH_STORE_DRIVER=file
+OAUTH_STORE_PATH=/data/oauth-store.json
+```
+
+The whole payload is AES-256-GCM encrypted and file writes use atomic rename. This backend is for one MCP process/node only.
+
+### PostgreSQL store
+
+```bash
+OAUTH_STORE_DRIVER=postgres
+OAUTH_DATABASE_URL=postgresql://user:password@db:5432/codex_glab
+```
+
+This is the recommended backend for horizontal scaling. Record payloads containing GitLab credentials remain encrypted with `OAUTH_ENCRYPTION_KEY`; lookup fields contain only non-secret identifiers or token hashes.
+
+The PostgreSQL backend provides cross-replica atomicity:
+
+- OAuth state consume uses `DELETE ... RETURNING`;
+- authorization-code consume uses `DELETE ... RETURNING`;
+- refresh-token rotation conditionally updates against the previous refresh-token hash;
+- concurrent GitLab token refresh can recover by using a newer session written by another replica.
 
 ## Token lifecycle
 
-The MCP access token and GitLab access token have independent lifetimes.
+- MCP access tokens are short-lived.
+- MCP refresh tokens rotate on every successful refresh and cannot be reused.
+- GitLab access tokens refresh automatically.
+- If the upstream GitLab authorization can no longer be refreshed, the MCP session is invalidated.
 
-- MCP access tokens are short-lived and backed by rotating MCP refresh tokens.
-- GitLab access tokens are refreshed automatically using the user's GitLab refresh token before expiry.
-- If the GitLab refresh token is revoked or cannot be refreshed, the corresponding MCP session is removed and the user must authorize again.
+## Authorization is not server policy
 
-## OAuth persistence
+A GitLab write must satisfy all applicable layers:
 
-The built-in store persists registrations, pending transactions, authorization codes, and sessions to `OAUTH_STORE_PATH`.
-
-Security properties:
-
-- the entire store is encrypted with AES-256-GCM;
-- GitLab access/refresh tokens exist only inside the encrypted payload;
-- MCP authorization/access/refresh tokens are stored only as SHA-256 hashes;
-- confidential OAuth client secrets are stored only as scrypt hashes;
-- writes use a temporary file + atomic rename;
-- file mode is set to `0600` when the filesystem supports it.
-
-`OAUTH_ENCRYPTION_KEY` must decode from base64 to exactly 32 bytes. Do not store the encryption key beside backups of the OAuth store.
-
-The v0.4 store is designed for one MCP server process/node. Do not mount one store file read-write into multiple replicas. Horizontal scaling needs a transactional shared store/locking backend.
-
-## Authorization is not the same as server policy
-
-OAuth scopes do not override safety configuration.
-
-A write request must satisfy all applicable layers:
-
-1. the user authorized `gitlab:write`;
+1. the OAuth session has `gitlab:write` when OAuth mode is used;
 2. `GITLAB_WRITE_ENABLED=true`;
-3. for merge, `GITLAB_MERGE_ENABLED=true`;
-4. the target is permitted by `GITLAB_ALLOWED_PROJECTS`, if configured;
-5. the GitLab account itself has permission for the requested API action.
+3. MR merge additionally requires `GITLAB_MERGE_ENABLED=true`;
+4. `GITLAB_ALLOWED_PROJECTS`, if configured, permits the project;
+5. the GitLab account has permission for the API action.
 
-This prevents an OAuth client from escalating beyond the MCP deployment's configured policy.
+OAuth scope therefore cannot escalate beyond deployment policy.
 
 ## Credential handling
 
-- Never commit `.env`, GitLab OAuth secrets, `OAUTH_ENCRYPTION_KEY`, tokens, or the OAuth store.
-- Prefer a secret manager for production environment variables.
-- Back up the encrypted store only when you also have a secure recovery plan for its encryption key.
-- Rotate the GitLab OAuth application secret and encryption key deliberately; changing the encryption key without migrating/recreating the store makes existing encrypted sessions unreadable.
-- Use separate OAuth applications and secrets for development and production.
+- Never commit `.env`, OAuth secrets, encryption keys, tokens, or OAuth store data.
+- Store `OAUTH_ENCRYPTION_KEY` separately from the file volume/PostgreSQL backups it protects.
+- Prefer a production secret manager.
+- Use separate GitLab OAuth applications for development and production.
+- Changing the encryption key requires an explicit migration/re-authorization plan because existing encrypted sessions cannot be read with a new key.

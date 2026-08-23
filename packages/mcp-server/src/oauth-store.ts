@@ -11,6 +11,8 @@ import { dirname } from "node:path";
 import type { GitLabIdentity } from "./auth-context.js";
 import { decryptJson, encryptJson, tokenHash, type EncryptedEnvelope } from "./oauth-crypto.js";
 
+export type MaybePromise<T> = T | Promise<T>;
+
 export interface OAuthClientRecord {
   clientId: string;
   clientName?: string;
@@ -64,6 +66,25 @@ export interface OAuthSessionRecord {
   updatedAt: number;
 }
 
+export interface OAuthStoreBackend {
+  init(): MaybePromise<void>;
+  close(): MaybePromise<void>;
+  cleanup(now?: number): MaybePromise<void>;
+  putClient(client: OAuthClientRecord): MaybePromise<void>;
+  getClient(clientId: string): MaybePromise<OAuthClientRecord | undefined>;
+  putTransaction(transaction: OAuthTransactionRecord): MaybePromise<void>;
+  takeTransaction(id: string): MaybePromise<OAuthTransactionRecord | undefined>;
+  putAuthorizationCode(code: OAuthAuthorizationCodeRecord): MaybePromise<void>;
+  takeAuthorizationCode(rawCode: string): MaybePromise<OAuthAuthorizationCodeRecord | undefined>;
+  putSession(session: OAuthSessionRecord): MaybePromise<void>;
+  getSessionById(sessionId: string): MaybePromise<OAuthSessionRecord | undefined>;
+  getSessionByAccessToken(rawToken: string): MaybePromise<OAuthSessionRecord | undefined>;
+  getSessionByRefreshToken(rawToken: string): MaybePromise<OAuthSessionRecord | undefined>;
+  updateSession(session: OAuthSessionRecord): MaybePromise<void>;
+  rotateSessionByRefreshToken(rawRefreshToken: string, session: OAuthSessionRecord): MaybePromise<boolean>;
+  deleteSession(sessionId: string): MaybePromise<void>;
+}
+
 interface OAuthStoreData {
   version: 1;
   clients: Record<string, OAuthClientRecord>;
@@ -82,7 +103,17 @@ function emptyStore(): OAuthStoreData {
   };
 }
 
-export class OAuthStore {
+function clone<T>(value: T): T {
+  return structuredClone(value);
+}
+
+/**
+ * Encrypted single-process file backend. This backend intentionally remains
+ * simple and is not safe for multiple server replicas writing the same file.
+ * Read/write boundaries clone records so caller mutation cannot mutate the
+ * persisted in-memory state before an explicit update/rotation operation.
+ */
+export class OAuthStore implements OAuthStoreBackend {
   private data: OAuthStoreData;
 
   constructor(
@@ -92,6 +123,9 @@ export class OAuthStore {
     this.data = this.load();
     this.cleanup();
   }
+
+  init(): void {}
+  close(): void {}
 
   private load(): OAuthStoreData {
     if (!existsSync(this.path)) return emptyStore();
@@ -142,17 +176,18 @@ export class OAuthStore {
   }
 
   putClient(client: OAuthClientRecord): void {
-    this.data.clients[client.clientId] = client;
+    this.data.clients[client.clientId] = clone(client);
     this.save();
   }
 
   getClient(clientId: string): OAuthClientRecord | undefined {
-    return this.data.clients[clientId];
+    const client = this.data.clients[clientId];
+    return client ? clone(client) : undefined;
   }
 
   putTransaction(transaction: OAuthTransactionRecord): void {
     this.cleanup();
-    this.data.transactions[transaction.id] = transaction;
+    this.data.transactions[transaction.id] = clone(transaction);
     this.save();
   }
 
@@ -162,12 +197,12 @@ export class OAuthStore {
     if (!transaction) return undefined;
     delete this.data.transactions[id];
     this.save();
-    return transaction;
+    return clone(transaction);
   }
 
   putAuthorizationCode(code: OAuthAuthorizationCodeRecord): void {
     this.cleanup();
-    this.data.authorizationCodes[code.codeHash] = code;
+    this.data.authorizationCodes[code.codeHash] = clone(code);
     this.save();
   }
 
@@ -178,33 +213,50 @@ export class OAuthStore {
     if (!code) return undefined;
     delete this.data.authorizationCodes[hash];
     this.save();
-    return code;
+    return clone(code);
   }
 
   putSession(session: OAuthSessionRecord): void {
     this.cleanup();
-    this.data.sessions[session.id] = session;
+    this.data.sessions[session.id] = clone(session);
     this.save();
+  }
+
+  getSessionById(sessionId: string): OAuthSessionRecord | undefined {
+    this.cleanup();
+    const session = this.data.sessions[sessionId];
+    return session ? clone(session) : undefined;
   }
 
   getSessionByAccessToken(rawToken: string): OAuthSessionRecord | undefined {
     this.cleanup();
     const hash = tokenHash(rawToken);
-    return Object.values(this.data.sessions).find((session) => session.accessTokenHash === hash);
+    const session = Object.values(this.data.sessions).find((entry) => entry.accessTokenHash === hash);
+    return session ? clone(session) : undefined;
   }
 
   getSessionByRefreshToken(rawToken: string): OAuthSessionRecord | undefined {
     this.cleanup();
     const hash = tokenHash(rawToken);
-    return Object.values(this.data.sessions).find((session) => session.refreshTokenHash === hash);
+    const session = Object.values(this.data.sessions).find((entry) => entry.refreshTokenHash === hash);
+    return session ? clone(session) : undefined;
   }
 
   updateSession(session: OAuthSessionRecord): void {
     if (!this.data.sessions[session.id]) {
       throw new Error("OAuth session no longer exists");
     }
-    this.data.sessions[session.id] = session;
+    this.data.sessions[session.id] = clone(session);
     this.save();
+  }
+
+  rotateSessionByRefreshToken(rawRefreshToken: string, session: OAuthSessionRecord): boolean {
+    this.cleanup();
+    const current = this.data.sessions[session.id];
+    if (!current || current.refreshTokenHash !== tokenHash(rawRefreshToken)) return false;
+    this.data.sessions[session.id] = clone(session);
+    this.save();
+    return true;
   }
 
   deleteSession(sessionId: string): void {

@@ -6,19 +6,24 @@ import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 
 import { runWithRequestAuth } from "./auth-context.js";
 import { loadConfig } from "./config.js";
+import { GitLabClient } from "./gitlab-client.js";
 import { OAuthGateway, OAuthProtocolError } from "./oauth-gateway.js";
 import { registerGitLabTools } from "./register-tools.js";
+import { registerGitLabV05Tools } from "./register-v05-tools.js";
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 const config = loadConfig();
 const oauthGateway = config.authMode === "oauth" ? new OAuthGateway(config) : undefined;
+if (oauthGateway) await oauthGateway.init();
 
 function createGitLabServer(): McpServer {
   const server = new McpServer(
     { name: "codex-plugin-glab", version: VERSION },
     { capabilities: { tools: {} } },
   );
-  registerGitLabTools(server, config);
+  const gitlabClient = new GitLabClient(config);
+  registerGitLabTools(server, config, gitlabClient);
+  registerGitLabV05Tools(server, config, gitlabClient);
   return server;
 }
 
@@ -109,7 +114,7 @@ async function handleOAuthRoute(
   if (req.method === "POST" && url.pathname === "/oauth/register") {
     try {
       const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
-      sendJson(res, 201, oauthGateway.registerClient(body));
+      sendJson(res, 201, await oauthGateway.registerClient(body));
     } catch (error) {
       sendOAuthError(res, error);
     }
@@ -119,7 +124,7 @@ async function handleOAuthRoute(
   if (req.method === "GET" && url.pathname === "/oauth/authorize") {
     try {
       res.writeHead(302, {
-        location: oauthGateway.beginAuthorization(url.searchParams),
+        location: await oauthGateway.beginAuthorization(url.searchParams),
         "cache-control": "no-store",
       });
       res.end();
@@ -162,6 +167,7 @@ const httpServer = createServer(async (req, res) => {
       server: "codex-plugin-glab",
       version: VERSION,
       authMode: config.authMode,
+      oauthStore: config.oauth?.storeDriver,
     });
     return;
   }
@@ -217,7 +223,16 @@ httpServer.listen(config.mcpPort, config.mcpHost, () => {
   );
   console.log(`GitLab host: ${config.gitlabHost}`);
   console.log(`Auth mode: ${config.authMode}`);
+  if (config.oauth) console.log(`OAuth store: ${config.oauth.storeDriver}`);
   console.log(
     `Writes: ${config.writeEnabled ? "enabled" : "disabled"}; merges: ${config.mergeEnabled ? "enabled" : "disabled"}`,
   );
 });
+
+async function shutdown(): Promise<void> {
+  httpServer.close();
+  await oauthGateway?.close();
+}
+
+process.once("SIGINT", () => void shutdown());
+process.once("SIGTERM", () => void shutdown());

@@ -1,4 +1,7 @@
+import type { LookupAddress } from "node:dns";
+import { lookup } from "node:dns/promises";
 import type { IncomingHttpHeaders } from "node:http";
+import { isIP } from "node:net";
 
 import type { GitLabIdentity, RequestAuthContext } from "./auth-context.js";
 import type { OAuthConfig, ServerConfig } from "./config.js";
@@ -11,16 +14,20 @@ import {
   verifyPkce,
 } from "./oauth-crypto.js";
 import {
-  OAuthStore,
   type GitLabOAuthTokenSet,
   type OAuthAuthorizationCodeRecord,
   type OAuthClientRecord,
   type OAuthSessionRecord,
+  type OAuthStoreBackend,
   type OAuthTransactionRecord,
 } from "./oauth-store.js";
+import { createOAuthStore } from "./oauth-store-factory.js";
 
 const READ_SCOPE = "gitlab:read";
 const WRITE_SCOPE = "gitlab:write";
+const CIMD_MAX_BYTES = 65_536;
+const CIMD_DEFAULT_CACHE_SECONDS = 900;
+const CIMD_MAX_CACHE_SECONDS = 86_400;
 
 interface GitLabTokenResponse {
   access_token: string;
@@ -34,6 +41,11 @@ interface GitLabUserResponse {
   id?: number;
   username?: string;
   name?: string;
+}
+
+interface CachedClientMetadata {
+  client: OAuthClientRecord;
+  expiresAt: number;
 }
 
 export class OAuthProtocolError extends Error {
@@ -102,12 +114,63 @@ function parseClientBasicAuth(headers: IncomingHttpHeaders): { clientId: string;
   }
 }
 
-export class OAuthGateway {
-  readonly store: OAuthStore;
+function isPrivateIpv4(address: string): boolean {
+  const parts = address.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return true;
+  const [a, b] = parts as [number, number, number, number];
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
+  );
+}
 
-  constructor(private readonly config: ServerConfig) {
-    const settings = oauth(config);
-    this.store = new OAuthStore(settings.storePath, settings.encryptionKey);
+function isPrivateAddress(address: string): boolean {
+  const kind = isIP(address);
+  if (kind === 4) return isPrivateIpv4(address);
+  if (kind !== 6) return true;
+  const value = address.toLowerCase();
+  if (value === "::" || value === "::1") return true;
+  if (value.startsWith("fc") || value.startsWith("fd")) return true;
+  if (/^fe[89ab]/.test(value)) return true;
+  if (value.startsWith("ff")) return true;
+  if (value.startsWith("::ffff:")) {
+    const mapped = value.slice("::ffff:".length);
+    return isIP(mapped) === 4 ? isPrivateIpv4(mapped) : true;
+  }
+  return false;
+}
+
+function cacheSeconds(cacheControl: string | null): number {
+  if (!cacheControl) return CIMD_DEFAULT_CACHE_SECONDS;
+  const match = /(?:^|,)\s*max-age=(\d+)/i.exec(cacheControl);
+  if (!match) return CIMD_DEFAULT_CACHE_SECONDS;
+  return Math.max(0, Math.min(Number(match[1]), CIMD_MAX_CACHE_SECONDS));
+}
+
+export class OAuthGateway {
+  readonly store: OAuthStoreBackend;
+  private readonly clientMetadataCache = new Map<string, CachedClientMetadata>();
+
+  constructor(
+    private readonly config: ServerConfig,
+    store?: OAuthStoreBackend,
+  ) {
+    this.store = store ?? createOAuthStore(oauth(config));
+  }
+
+  async init(): Promise<void> {
+    await this.store.init();
+  }
+
+  async close(): Promise<void> {
+    await this.store.close();
   }
 
   protectedResourceMetadata(): Record<string, unknown> {
@@ -134,11 +197,11 @@ export class OAuthGateway {
       code_challenge_methods_supported: ["S256"],
       token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
       scopes_supported: this.config.writeEnabled ? [READ_SCOPE, WRITE_SCOPE] : [READ_SCOPE],
-      client_id_metadata_document_supported: false,
+      client_id_metadata_document_supported: settings.cimdEnabled,
     };
   }
 
-  registerClient(input: Record<string, unknown>): Record<string, unknown> {
+  async registerClient(input: Record<string, unknown>): Promise<Record<string, unknown>> {
     const settings = oauth(this.config);
     if (!settings.dcrEnabled) {
       throw new OAuthProtocolError("invalid_request", "Dynamic client registration is disabled", 404);
@@ -171,7 +234,7 @@ export class OAuthGateway {
       record.clientSecretSalt = secret.salt;
       record.clientSecretHash = secret.hash;
     }
-    this.store.putClient(record);
+    await this.store.putClient(record);
 
     return {
       client_id: clientId,
@@ -189,7 +252,7 @@ export class OAuthGateway {
     };
   }
 
-  beginAuthorization(params: URLSearchParams): string {
+  async beginAuthorization(params: URLSearchParams): Promise<string> {
     const settings = oauth(this.config);
     if (params.get("response_type") !== "code") {
       throw new OAuthProtocolError("unsupported_response_type", "Only response_type=code is supported");
@@ -205,8 +268,7 @@ export class OAuthGateway {
       throw new OAuthProtocolError("invalid_request", "PKCE code_challenge_method=S256 is required");
     }
 
-    const client = this.store.getClient(clientId);
-    if (!client) throw new OAuthProtocolError("unauthorized_client", "Unknown OAuth client");
+    const client = await this.resolveClient(clientId);
     const redirectUri = validateRedirectUri(redirectUriRaw);
     if (!client.redirectUris.includes(redirectUri)) {
       throw new OAuthProtocolError("invalid_request", "redirect_uri is not registered for this client");
@@ -231,7 +293,7 @@ export class OAuthGateway {
       gitlabPkceVerifier,
       expiresAt: Date.now() + settings.transactionTtlSeconds * 1000,
     };
-    this.store.putTransaction(transaction);
+    await this.store.putTransaction(transaction);
 
     const authorize = new URL(`${this.config.gitlabHost}/oauth/authorize`);
     authorize.searchParams.set("client_id", settings.gitlabClientId);
@@ -248,7 +310,7 @@ export class OAuthGateway {
     const settings = oauth(this.config);
     const state = params.get("state");
     if (!state) throw new OAuthProtocolError("invalid_request", "Missing OAuth state");
-    const transaction = this.store.takeTransaction(state);
+    const transaction = await this.store.takeTransaction(state);
     if (!transaction || transaction.expiresAt <= Date.now()) {
       throw new OAuthProtocolError("invalid_request", "OAuth state is invalid or expired");
     }
@@ -279,7 +341,7 @@ export class OAuthGateway {
       identity,
       expiresAt: Date.now() + settings.authorizationCodeTtlSeconds * 1000,
     };
-    this.store.putAuthorizationCode(codeRecord);
+    await this.store.putAuthorizationCode(codeRecord);
 
     downstream.searchParams.set("code", downstreamCode);
     if (transaction.downstreamState) downstream.searchParams.set("state", transaction.downstreamState);
@@ -302,7 +364,7 @@ export class OAuthGateway {
   }
 
   async authenticateAccessToken(rawToken: string): Promise<RequestAuthContext | undefined> {
-    const session = this.store.getSessionByAccessToken(rawToken);
+    const session = await this.store.getSessionByAccessToken(rawToken);
     if (!session || session.accessExpiresAt <= Date.now()) return undefined;
     const updated = await this.ensureGitLabAccessToken(session);
     return {
@@ -314,14 +376,124 @@ export class OAuthGateway {
     };
   }
 
-  private authenticateClient(
+  private async resolveClient(clientId: string): Promise<OAuthClientRecord> {
+    const settings = oauth(this.config);
+    if (clientId.startsWith("https://")) {
+      if (!settings.cimdEnabled) {
+        throw new OAuthProtocolError("unauthorized_client", "Client ID Metadata Documents are disabled", 401);
+      }
+      return this.fetchClientMetadata(clientId);
+    }
+    const client = await this.store.getClient(clientId);
+    if (!client) throw new OAuthProtocolError("unauthorized_client", "Unknown OAuth client", 401);
+    return client;
+  }
+
+  private async fetchClientMetadata(clientId: string): Promise<OAuthClientRecord> {
+    const cached = this.clientMetadataCache.get(clientId);
+    if (cached && cached.expiresAt > Date.now()) return cached.client;
+
+    const settings = oauth(this.config);
+    let url: URL;
+    try {
+      url = new URL(clientId);
+    } catch {
+      throw new OAuthProtocolError("invalid_client", "CIMD client_id must be a valid HTTPS URL", 401);
+    }
+    if (url.protocol !== "https:" || url.pathname === "/" || url.username || url.password) {
+      throw new OAuthProtocolError("invalid_client", "CIMD client_id must be an HTTPS URL with a path", 401);
+    }
+    const host = url.hostname.toLowerCase();
+    if (settings.cimdAllowedHosts.size > 0 && !settings.cimdAllowedHosts.has(host)) {
+      throw new OAuthProtocolError("unauthorized_client", "CIMD client host is not allowlisted", 401);
+    }
+    if (!settings.cimdAllowPrivateNetwork) {
+      if (isIP(host) && isPrivateAddress(host)) {
+        throw new OAuthProtocolError("unauthorized_client", "CIMD private-network targets are blocked", 401);
+      }
+      if (!isIP(host)) {
+        let addresses: LookupAddress[];
+        try {
+          addresses = await lookup(host, { all: true, verbatim: true });
+        } catch {
+          throw new OAuthProtocolError("invalid_client", "Unable to resolve CIMD client host", 401);
+        }
+        if (addresses.length === 0 || addresses.some((entry) => isPrivateAddress(entry.address))) {
+          throw new OAuthProtocolError("unauthorized_client", "CIMD host resolves to a blocked network", 401);
+        }
+      }
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: { Accept: "application/json" },
+        redirect: "error",
+        signal: AbortSignal.timeout(settings.cimdFetchTimeoutMs),
+      });
+    } catch {
+      throw new OAuthProtocolError("invalid_client", "Unable to fetch CIMD metadata document", 401);
+    }
+    if (!response.ok) {
+      throw new OAuthProtocolError("invalid_client", `CIMD metadata returned HTTP ${response.status}`, 401);
+    }
+    const contentLength = Number(response.headers.get("content-length") ?? "0");
+    if (contentLength > CIMD_MAX_BYTES) {
+      throw new OAuthProtocolError("invalid_client", "CIMD metadata document is too large", 401);
+    }
+    const raw = await response.text();
+    if (Buffer.byteLength(raw, "utf8") > CIMD_MAX_BYTES) {
+      throw new OAuthProtocolError("invalid_client", "CIMD metadata document is too large", 401);
+    }
+
+    let metadata: Record<string, unknown>;
+    try {
+      metadata = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      throw new OAuthProtocolError("invalid_client", "CIMD metadata document is not valid JSON", 401);
+    }
+    if (metadata.client_id !== clientId) {
+      throw new OAuthProtocolError("invalid_client", "CIMD client_id must match the metadata document URL exactly", 401);
+    }
+    if (typeof metadata.client_name !== "string" || !metadata.client_name.trim()) {
+      throw new OAuthProtocolError("invalid_client", "CIMD client_name is required", 401);
+    }
+    if (!Array.isArray(metadata.redirect_uris) || metadata.redirect_uris.length === 0) {
+      throw new OAuthProtocolError("invalid_client", "CIMD redirect_uris is required", 401);
+    }
+    const redirectUris = metadata.redirect_uris.map((entry) => validateRedirectUri(String(entry)));
+    const method = String(metadata.token_endpoint_auth_method ?? "none");
+    if (method !== "none") {
+      throw new OAuthProtocolError("invalid_client", "This release supports public CIMD clients with token_endpoint_auth_method=none", 401);
+    }
+    if (Array.isArray(metadata.grant_types) && !metadata.grant_types.includes("authorization_code")) {
+      throw new OAuthProtocolError("unauthorized_client", "CIMD client does not allow authorization_code", 401);
+    }
+    if (Array.isArray(metadata.response_types) && !metadata.response_types.includes("code")) {
+      throw new OAuthProtocolError("unauthorized_client", "CIMD client does not allow response_type=code", 401);
+    }
+
+    const client: OAuthClientRecord = {
+      clientId,
+      clientName: metadata.client_name.trim().slice(0, 200),
+      redirectUris,
+      tokenEndpointAuthMethod: "none",
+      createdAt: Date.now(),
+    };
+    this.clientMetadataCache.set(clientId, {
+      client,
+      expiresAt: Date.now() + cacheSeconds(response.headers.get("cache-control")) * 1000,
+    });
+    return client;
+  }
+
+  private async authenticateClient(
     body: URLSearchParams,
     headers: IncomingHttpHeaders,
-  ): OAuthClientRecord {
+  ): Promise<OAuthClientRecord> {
     const basic = parseClientBasicAuth(headers);
     const clientId = basic?.clientId || body.get("client_id") || "";
-    const client = this.store.getClient(clientId);
-    if (!client) throw new OAuthProtocolError("invalid_client", "Unknown OAuth client", 401);
+    const client = await this.resolveClient(clientId);
     if (client.tokenEndpointAuthMethod === "none") return client;
     const suppliedSecret = basic?.clientSecret || body.get("client_secret") || "";
     if (!client.clientSecretSalt || !client.clientSecretHash || !suppliedSecret) {
@@ -338,14 +510,14 @@ export class OAuthGateway {
     headers: IncomingHttpHeaders,
   ): Promise<Record<string, unknown>> {
     const settings = oauth(this.config);
-    const client = this.authenticateClient(body, headers);
+    const client = await this.authenticateClient(body, headers);
     const rawCode = body.get("code");
     const redirectUriRaw = body.get("redirect_uri");
     const verifier = body.get("code_verifier");
     if (!rawCode || !redirectUriRaw || !verifier) {
       throw new OAuthProtocolError("invalid_request", "code, redirect_uri, and code_verifier are required");
     }
-    const code = this.store.takeAuthorizationCode(rawCode);
+    const code = await this.store.takeAuthorizationCode(rawCode);
     if (!code || code.expiresAt <= Date.now()) {
       throw new OAuthProtocolError("invalid_grant", "Authorization code is invalid or expired");
     }
@@ -373,7 +545,7 @@ export class OAuthGateway {
       createdAt: now,
       updatedAt: now,
     };
-    this.store.putSession(session);
+    await this.store.putSession(session);
     return {
       access_token: accessToken,
       token_type: "Bearer",
@@ -388,10 +560,10 @@ export class OAuthGateway {
     headers: IncomingHttpHeaders,
   ): Promise<Record<string, unknown>> {
     const settings = oauth(this.config);
-    const client = this.authenticateClient(body, headers);
+    const client = await this.authenticateClient(body, headers);
     const rawRefresh = body.get("refresh_token");
     if (!rawRefresh) throw new OAuthProtocolError("invalid_request", "refresh_token is required");
-    const session = this.store.getSessionByRefreshToken(rawRefresh);
+    const session = await this.store.getSessionByRefreshToken(rawRefresh);
     if (!session || session.clientId !== client.clientId || session.refreshExpiresAt <= Date.now()) {
       throw new OAuthProtocolError("invalid_grant", "Refresh token is invalid or expired");
     }
@@ -405,7 +577,10 @@ export class OAuthGateway {
     updated.accessExpiresAt = now + settings.accessTokenTtlSeconds * 1000;
     updated.refreshExpiresAt = now + settings.refreshTokenTtlSeconds * 1000;
     updated.updatedAt = now;
-    this.store.updateSession(updated);
+    const rotated = await this.store.rotateSessionByRefreshToken(rawRefresh, updated);
+    if (!rotated) {
+      throw new OAuthProtocolError("invalid_grant", "Refresh token was already used", 401);
+    }
     return {
       access_token: accessToken,
       token_type: "Bearer",
@@ -500,10 +675,18 @@ export class OAuthGateway {
     try {
       session.gitlabTokens = await this.refreshGitLabToken(session.gitlabTokens);
       session.updatedAt = Date.now();
-      this.store.updateSession(session);
+      await this.store.updateSession(session);
       return session;
     } catch (error) {
-      this.store.deleteSession(session.id);
+      const latest = await this.store.getSessionById(session.id);
+      if (
+        latest &&
+        latest.updatedAt > session.updatedAt &&
+        latest.gitlabTokens.expiresAt > Date.now() + 30_000
+      ) {
+        return latest;
+      }
+      await this.store.deleteSession(session.id);
       if (error instanceof OAuthProtocolError) throw error;
       throw new OAuthProtocolError("invalid_grant", "GitLab authorization can no longer be refreshed", 401);
     }
