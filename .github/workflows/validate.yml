@@ -41,6 +41,17 @@ jobs:
           python3 scripts/validate_chatgpt_binding.py
           python3 scripts/validate_public_config.py
 
+      - name: Validate registered ChatGPT App packaging
+        run: |
+          rm -rf /tmp/gitlab-chatgpt-app-ci
+          python3 scripts/build_chatgpt_app.py \
+            --app-id plugin_asdk_app_ci_123 \
+            --mcp-url https://gitlab-mcp.example.com/mcp \
+            --output /tmp/gitlab-chatgpt-app-ci
+          test -f /tmp/gitlab-chatgpt-app-ci/plugins/gitlab-self-hosted/.app.json
+          grep -q 'plugin_asdk_app_ci_123' /tmp/gitlab-chatgpt-app-ci/plugins/gitlab-self-hosted/.app.json
+          grep -q '"apps": "./.app.json"' /tmp/gitlab-chatgpt-app-ci/plugins/gitlab-self-hosted/.codex-plugin/plugin.json
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
