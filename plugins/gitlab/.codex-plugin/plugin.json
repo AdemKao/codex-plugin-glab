@@ -1,6 +1,6 @@
 {
   "name": "gitlab",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Inspect and operate GitLab projects through the bundled production-oriented MCP server with safe shared-token or per-user OAuth workflows for Codex and ChatGPT.",
   "author": {
     "name": "AdemKao",
