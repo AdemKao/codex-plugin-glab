@@ -1,7 +1,7 @@
 {
-  "name": "gitlab",
-  "version": "0.5.3",
-  "description": "Inspect and operate GitLab projects through the bundled production-oriented MCP server with safe shared-token or per-user OAuth workflows for Codex and ChatGPT.",
+  "name": "gitlab-self-hosted",
+  "version": "0.5.4",
+  "description": "Inspect and operate GitLab projects through the bundled production-oriented self-hosted MCP server with safe shared-token or per-user OAuth workflows for Codex and ChatGPT.",
   "author": {
     "name": "AdemKao",
     "url": "https://github.com/AdemKao"
@@ -11,6 +11,7 @@
   "license": "MIT",
   "keywords": [
     "gitlab",
+    "self-hosted",
     "glab",
     "merge-request",
     "code-review",
@@ -25,9 +26,9 @@
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "GitLab",
-    "shortDescription": "Production GitLab MCP with OAuth and CIMD",
-    "longDescription": "Use the bundled GitLab MCP server to inspect projects, review merge requests, manage issues, operate repository files and pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed. Personal/Codex users can add a remote Streamable HTTP /mcp server and complete OAuth discovery directly; the bundled localhost .mcp.json remains a local fallback. Deploy with a shared service token for trusted single-user use or per-user OAuth with CIMD/DCR support and an optional PostgreSQL store for multi-replica deployments.",
+    "displayName": "GitLab Self-Hosted",
+    "shortDescription": "Self-hosted GitLab MCP with OAuth and CIMD",
+    "longDescription": "Use the bundled self-hosted GitLab MCP server to inspect projects, review merge requests, manage issues, operate repository files and pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed. The distinct gitlab-self-hosted package identifier avoids collision with the OpenAI-curated GitLab plugin. Personal/Codex users can add a remote Streamable HTTP /mcp server and complete OAuth discovery directly; the bundled localhost .mcp.json remains a local fallback.",
     "developerName": "AdemKao",
     "category": "Developer Tools",
     "capabilities": [
