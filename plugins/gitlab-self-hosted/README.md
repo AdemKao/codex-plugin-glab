@@ -30,15 +30,40 @@ Portable/local plugin reference:
 gitlab-self-hosted@ademkao-codex-plugins
 ```
 
+Generated personal remote reference:
+
+```text
+gitlab-self-hosted@ademkao-gitlab-remote
+```
+
 Do not use the old `gitlab@ademkao-codex-plugins` reference for this repository after upgrading to v0.5.4.
 
-## Portable marketplace vs ChatGPT App binding
+## Portable marketplace vs remote plugin variants
 
 The portable source plugin keeps `./.mcp.json` pointed at `http://127.0.0.1:3333/mcp` as a same-host Codex fallback. The repository root marketplace, `ademkao-codex-plugins`, installs this portable source package.
 
 A remote MCP server that you add and authenticate separately in MCP settings does **not** automatically replace that packaged localhost dependency in ChatGPT.
 
-To use the plugin with a remote MCP deployment:
+If you want the plugin itself to use a remote MCP deployment without a ChatGPT
+App/connector ID, build a personal remote marketplace:
+
+```bash
+python3 scripts/build_personal_variant.py \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+Import/install the generated marketplace root and use:
+
+```text
+gitlab-self-hosted@ademkao-gitlab-remote
+```
+
+The generated plugin keeps `mcpServers: "./.mcp.json"`, but points the copied
+`.mcp.json` at the validated remote endpoint. It uses the client's normal OAuth
+flow and does not modify the portable source package.
+
+If you need a ChatGPT App/connector binding instead, use the workspace-specific
+variant:
 
 1. create/connect the ChatGPT App/connector for the remote HTTPS `/mcp` endpoint;
 2. complete OAuth for that App/connector;
