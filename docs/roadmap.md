@@ -45,18 +45,31 @@ Completed:
 - pipeline create/retry/cancel tools;
 - Docker Compose PostgreSQL profile and migration documentation.
 
-## v0.5.1 — ChatGPT remote App binding UX
+## v0.5.1 — Initial workspace binding helper
 
 Completed:
 
-- first-class remote ChatGPT binding generator for Issue #8;
-- required `--app-id` + `--mcp-url` workspace binding inputs;
+- live remote MCP doctor for Protected Resource Metadata, Authorization Server Metadata, and unauthenticated `/mcp` OAuth challenge checks;
 - public HTTPS `/mcp` URL validation with unsafe target rejection;
-- live ChatGPT MCP doctor for Protected Resource Metadata, Authorization Server Metadata, and unauthenticated `/mcp` OAuth challenge checks;
-- generated `.app.json` and `.chatgpt-setup.json` without modifying the portable source plugin;
+- an initial workspace-specific `.app.json` binding generator;
 - preserved localhost `.mcp.json` for local Codex;
-- CI coverage for a fake ChatGPT-bound variant and unsafe URL rejection;
-- explicit documentation of the ChatGPT Custom MCP App creation/consent boundary.
+- CI coverage for helper generation and unsafe URL rejection.
+
+v0.5.2 refines the product positioning introduced in v0.5.1 so that this optional binding helper is no longer presented as the primary personal/Codex installation path or as an OpenAI native App Template.
+
+## v0.5.2 — Direct Codex MCP / OAuth installation UX
+
+Completed:
+
+- personal/Codex remote setup now explicitly follows **Add server -> Streamable HTTP -> remote HTTPS `/mcp` -> OAuth discovery/authentication**;
+- direct remote OAuth no longer requires `.app.json`, a workspace app/connector ID, or `build_chatgpt_variant.py`;
+- portable `plugins/gitlab/.mcp.json` remains the localhost `http://127.0.0.1:3333/mcp` fallback for same-host local use;
+- moved the helper input from `app-template/.app.json.example` to `workspace-binding/.app.json.example` to remove App Template ambiguity;
+- repositioned `build_chatgpt_variant.py` as an optional **workspace binding helper** that requires an existing workspace app/connector ID;
+- generated helper metadata and CI validation explicitly state that the output is not an OpenAI managed App Template;
+- documented managed workspace App Templates as a separate administrator/platform feature rather than a repository-provided template;
+- synchronized English / Traditional Chinese README, ChatGPT/Codex setup docs, setup skill, capability matrix, roadmap, and changelog;
+- synchronized `VERSION`, plugin manifest, MCP package, and MCP runtime version to `0.5.2`.
 
 ## v0.6 — Policy, observability, and compatibility
 
