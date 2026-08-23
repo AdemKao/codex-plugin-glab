@@ -54,6 +54,28 @@ Codex / native MCP client
 
 This direct MCP path does **not** require `.app.json` or `scripts/build_chatgpt_variant.py`.
 
+### Personal `@GitLab Self-Hosted`: remote plugin variant
+
+If you want the installed plugin reference itself to load the remote MCP server,
+generate a personal marketplace artifact:
+
+```bash
+python3 scripts/build_personal_variant.py \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+The generated marketplace is named `ademkao-gitlab-remote`, so its plugin
+reference is:
+
+```text
+gitlab-self-hosted@ademkao-gitlab-remote
+```
+
+This variant keeps `mcpServers: "./.mcp.json"` and replaces the copied
+`.mcp.json` URL with the validated remote HTTPS endpoint. It uses the client's
+normal OAuth discovery flow, does not require a ChatGPT App/connector ID, and
+does not modify the portable source plugin.
+
 ### ChatGPT: generated App-bound marketplace
 
 ```text

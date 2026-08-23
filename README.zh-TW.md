@@ -10,7 +10,7 @@
 1. GitLab Self-Hosted Plugin：workflow skills、安全 routing 與 local `git` / `glab` fallback；
 2. Self-hosted GitLab MCP Server：直接透過 GitLab REST API 操作 GitLab。
 
-> **狀態：** v0.5.4 / early preview。
+> **狀態：** v0.5.5 / early preview。
 >
 > **第三方專案：** 本 repo 並非 GitLab 或 OpenAI 官方專案，也不代表獲得兩者背書。
 
@@ -28,6 +28,12 @@ Generated ChatGPT App-bound reference：
 
 ```text
 gitlab-self-hosted@ademkao-gitlab-chatgpt
+```
+
+Generated personal remote reference：
+
+```text
+gitlab-self-hosted@ademkao-gitlab-remote
 ```
 
 v0.5.4 之後，舊的 `gitlab@ademkao-codex-plugins` 不再代表本 repo 的正確安裝 reference。
@@ -171,6 +177,23 @@ https://gitlab-mcp.example.com/mcp
 6. 讓 client 依 server 的 OAuth discovery metadata 完成 discovery，接著完成 GitLab authorization，最後先跑 harmless read 驗證。
 
 OAuth mode 下，未登入呼叫 `/mcp` 會回 `401`，`WWW-Authenticate` 會指向 Protected Resource Metadata；server 再提供 Authorization Server Metadata 與 CIMD/DCR 相容能力。
+
+## Personal remote plugin variant
+
+Portable root marketplace 為了支援同機 Codex，會保留 localhost fallback。如果你希望 `@GitLab Self-Hosted` plugin 本身直接呼叫 remote deployment，請產生 personal remote marketplace，不要修改 public source plugin：
+
+```bash
+python3 scripts/build_personal_variant.py \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+預設輸出是 `dist/gitlab-remote-marketplace/`。Import/install 這個 generated marketplace 後，使用：
+
+```text
+gitlab-self-hosted@ademkao-gitlab-remote
+```
+
+這個 variant 保留 `mcpServers: "./.mcp.json"`，但 copied `.mcp.json` 會指向通過驗證的 remote HTTPS endpoint。Client 會直接執行 OAuth discovery 與 authorization，不需要 ChatGPT App/connector ID。Generated output 是 workspace-specific；如果 endpoint 只屬於組織，應保持 private。
 
 ## localhost `.mcp.json` fallback
 

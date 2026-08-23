@@ -10,7 +10,7 @@ An open-source GitLab integration for **ChatGPT, Codex, and MCP clients**. The r
 1. a GitLab Self-Hosted plugin with workflow skills and safe routing; and
 2. a self-hosted GitLab MCP server backed by the GitLab REST API.
 
-> **Status:** v0.5.4 / early preview.
+> **Status:** v0.5.5 / early preview.
 >
 > **Third-party project:** this repository is not an official GitLab or OpenAI project and is not endorsed by either company.
 
@@ -28,6 +28,12 @@ Generated ChatGPT App-bound reference:
 
 ```text
 gitlab-self-hosted@ademkao-gitlab-chatgpt
+```
+
+Generated personal remote reference:
+
+```text
+gitlab-self-hosted@ademkao-gitlab-remote
 ```
 
 The old `gitlab@ademkao-codex-plugins` reference is deprecated for this repository after v0.5.4.
@@ -171,6 +177,31 @@ https://gitlab-mcp.example.com/mcp
 6. Let the client follow the server's OAuth discovery metadata, complete GitLab authorization, and verify a harmless read first.
 
 In OAuth mode, an unauthenticated `/mcp` request returns `401` with `WWW-Authenticate` pointing to Protected Resource Metadata. The server then exposes Authorization Server Metadata and CIMD/DCR support for compatible clients.
+
+## Personal remote plugin variant
+
+The portable root marketplace keeps a localhost fallback so it can be used when
+the bundled server runs on the same Codex host. If you want the `@GitLab
+Self-Hosted` plugin itself to call a remote deployment, generate a personal
+remote marketplace instead of editing the public source plugin:
+
+```bash
+python3 scripts/build_personal_variant.py \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+The default output is `dist/gitlab-remote-marketplace/`. Import or install that
+generated marketplace, then use:
+
+```text
+gitlab-self-hosted@ademkao-gitlab-remote
+```
+
+This variant keeps `mcpServers: "./.mcp.json"`, but the copied `.mcp.json`
+points at the validated remote HTTPS endpoint. The client performs OAuth
+discovery and authorization directly; no ChatGPT App/connector ID is required.
+The generated output is workspace-specific and should remain private when the
+endpoint is private to an organization.
 
 ## Localhost `.mcp.json` fallback
 

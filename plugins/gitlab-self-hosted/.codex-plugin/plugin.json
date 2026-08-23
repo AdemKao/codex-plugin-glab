@@ -1,6 +1,6 @@
 {
   "name": "gitlab-self-hosted",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Inspect and operate GitLab projects through the bundled production-oriented self-hosted MCP server with safe shared-token or per-user OAuth workflows for Codex and ChatGPT.",
   "author": {
     "name": "AdemKao",

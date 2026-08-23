@@ -13,6 +13,23 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 - Observability, audit events, and operational metrics for hosted deployments.
 - Additional GitLab release/member/milestone workflows.
 
+## [0.5.5] - 2026-08-23
+
+### Fixed
+
+- Added `scripts/build_personal_variant.py` for users who want the installed `GitLab Self-Hosted` plugin to call a remote HTTPS MCP server directly.
+- Generated personal marketplace artifacts replace the localhost fallback with the requested validated `/mcp` endpoint without requiring a ChatGPT App/connector ID.
+- Kept the portable source plugin and its same-host localhost fallback unchanged.
+
+### Changed
+
+- Documented the difference between direct MCP setup, the portable local plugin, the personal remote plugin variant, and the App-bound ChatGPT variant.
+- Synchronized `VERSION`, plugin manifest, MCP package, and MCP runtime-reported version at v0.5.5.
+
+### Security
+
+- Personal remote variant generation reuses the existing HTTPS, public-host, and `/mcp` URL validation; credentials and OAuth secrets remain outside generated plugin artifacts.
+
 ## [0.5.4] - 2026-08-23
 
 ### Fixed

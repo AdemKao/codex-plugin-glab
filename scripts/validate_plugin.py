@@ -18,10 +18,12 @@ MCP = PLUGIN / ".mcp.json"
 APP_TEMPLATE = PLUGIN / "workspace-binding" / ".app.json.example"
 MARKETPLACE = ROOT / ".agents" / "plugins" / "marketplace.json"
 BUILDER = ROOT / "scripts" / "build_chatgpt_variant.py"
+PERSONAL_BUILDER = ROOT / "scripts" / "build_personal_variant.py"
 MCP_PACKAGE = ROOT / "packages" / "mcp-server" / "package.json"
 VERSION_FILE = ROOT / "VERSION"
 PLACEHOLDER = "REPLACE_WITH_GITLAB_APP_OR_CONNECTOR_ID"
 GENERATED_MARKETPLACE = "ademkao-gitlab-chatgpt"
+GENERATED_PERSONAL_MARKETPLACE = "ademkao-gitlab-remote"
 TEST_MCP_URL = "https://gitlab-mcp.example.com/mcp"
 
 DOC_PAIRS = [
@@ -170,6 +172,69 @@ def validate_generated_marketplace() -> None:
                 fail(f"builder accepted unsafe MCP URL: {bad_url}")
 
 
+def validate_generated_personal_marketplace() -> None:
+    with tempfile.TemporaryDirectory(prefix="codex-plugin-glab-personal-") as temp:
+        output = Path(temp) / "marketplace"
+        run = subprocess.run(
+            [sys.executable, str(PERSONAL_BUILDER), "--mcp-url", TEST_MCP_URL, "--output", str(output)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if run.returncode != 0:
+            fail(f"personal remote marketplace builder failed: {run.stderr.strip()}")
+
+        plugin = output / "plugins" / PLUGIN_ID
+        generated_manifest = load(plugin / ".codex-plugin" / "plugin.json")
+        generated_mcp = load(plugin / ".mcp.json")
+        generated_setup = load(plugin / ".chatgpt-setup.json")
+        generated_marketplace = load(output / ".agents" / "plugins" / "marketplace.json")
+
+        entry = generated_marketplace.get("plugins", [{}])[0]
+        expected_ref = f"{PLUGIN_ID}@{GENERATED_PERSONAL_MARKETPLACE}"
+        if generated_marketplace.get("name") != GENERATED_PERSONAL_MARKETPLACE:
+            fail("generated personal marketplace has the wrong catalog name")
+        if entry.get("name") != PLUGIN_ID or entry.get("source", {}).get("path") != f"./plugins/{PLUGIN_ID}":
+            fail("generated personal marketplace identity/path is not namespaced")
+        if generated_manifest.get("name") != PLUGIN_ID or generated_manifest.get("mcpServers") != "./.mcp.json":
+            fail("generated personal plugin manifest has the wrong MCP binding")
+        if "apps" in generated_manifest:
+            fail("generated personal plugin must not require an App binding")
+        if generated_mcp.get("mcpServers", {}).get(PLUGIN_ID) is not None:
+            fail("generated personal MCP server must retain the stable gitlab server key")
+        if generated_mcp.get("mcpServers", {}).get("gitlab", {}).get("url") != TEST_MCP_URL:
+            fail("generated personal MCP manifest has the wrong remote URL")
+        if generated_setup.get("plugin_id") != PLUGIN_ID or generated_setup.get("plugin_reference") != expected_ref:
+            fail("generated personal setup metadata has the wrong plugin identity/reference")
+        if generated_setup.get("binding_mode") != "remote-mcp":
+            fail("generated personal setup must identify remote-mcp binding mode")
+        if generated_setup.get("requires_chatgpt_app_binding") is not False:
+            fail("generated personal setup must not require ChatGPT App binding")
+        if generated_setup.get("source_local_mcp_replaced") is not True:
+            fail("generated personal setup must record replacement of the local MCP URL")
+        if (output / "plugins" / "gitlab").exists() or (plugin / "workspace-binding").exists():
+            fail("generated personal marketplace must not recreate generic or workspace-only packages")
+
+    for bad_url in (
+        "http://gitlab-mcp.example.com/mcp",
+        "https://localhost/mcp",
+        "https://127.0.0.1/mcp",
+        "https://10.0.0.8/mcp",
+        "https://gitlab-mcp.example.com/not-mcp",
+    ):
+        with tempfile.TemporaryDirectory(prefix="codex-plugin-glab-personal-reject-") as temp:
+            run = subprocess.run(
+                [sys.executable, str(PERSONAL_BUILDER), "--mcp-url", bad_url, "--output", str(Path(temp) / "out")],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if run.returncode == 0:
+                fail(f"personal builder accepted unsafe MCP URL: {bad_url}")
+
+
 def validate_skills_and_docs() -> None:
     skill_files = sorted((PLUGIN / "skills").glob("*/SKILL.md"))
     if len(skill_files) < 4:
@@ -191,6 +256,7 @@ def main() -> None:
     validate_marketplace()
     validate_release_metadata()
     validate_generated_marketplace()
+    validate_generated_personal_marketplace()
     validate_skills_and_docs()
     print("codex-plugin-glab validation passed")
 

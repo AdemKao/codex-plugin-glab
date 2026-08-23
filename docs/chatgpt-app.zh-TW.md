@@ -54,6 +54,23 @@ Codex / native MCP client
 
 這條 direct MCP 路徑**不需要** `.app.json` 或 `scripts/build_chatgpt_variant.py`。
 
+### Personal `@GitLab Self-Hosted`：remote plugin variant
+
+如果你希望已安裝的 plugin reference 本身就載入 remote MCP server，請產生 personal marketplace artifact：
+
+```bash
+python3 scripts/build_personal_variant.py \
+  --mcp-url https://gitlab-mcp.example.com/mcp
+```
+
+Generated marketplace 名稱是 `ademkao-gitlab-remote`，plugin reference 是：
+
+```text
+gitlab-self-hosted@ademkao-gitlab-remote
+```
+
+這個 variant 保留 `mcpServers: "./.mcp.json"`，並把 copied `.mcp.json` URL 改成通過驗證的 remote HTTPS endpoint。它使用 client 原本的 OAuth discovery flow，不需要 ChatGPT App/connector ID，也不會修改 portable source plugin。
+
 ### ChatGPT：generated App-bound marketplace
 
 ```text
