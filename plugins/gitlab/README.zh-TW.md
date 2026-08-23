@@ -14,10 +14,26 @@ Project、issue、MR、branch、commit、repository file、pipeline 等結構化
 - `glab-address-comments` — 處理 MR review feedback 並 push 修正。
 - `glab-fix-ci` — 分析 GitLab pipeline/job failure 並發布修正。
 
-## 重要：Codex MCP 與 ChatGPT plugin binding 是不同層
+## 重要：portable marketplace 與 ChatGPT App binding
 
-Portable source plugin 會保留 `./.mcp.json -> http://127.0.0.1:3333/mcp`，作為同機 Codex 的 local fallback。
+Portable source plugin 會保留 `./.mcp.json -> http://127.0.0.1:3333/mcp`，作為同機 Codex 的 local fallback。Repo root marketplace `ademkao-codex-plugins` 安裝的就是這份 portable source package。
 
-你在 MCP settings 裡另外新增並完成 OAuth 的 remote MCP server，**不會自動取代** `@GitLab` plugin 內 packaged 的 localhost dependency。若要在 ChatGPT 透過 `@GitLab` 使用 remote MCP，必須先建立/連線對應的 ChatGPT App / connector，再用 `scripts/build_chatgpt_variant.py` 產生並安裝 workspace-bound variant。產生出的 ChatGPT variant 只保留 App binding，並移除 source localhost MCP dependency。
+你在 MCP settings 裡另外新增並完成 OAuth 的 remote MCP server，**不會自動取代** `@GitLab` packaged 的 localhost dependency。
+
+若要讓 `@GitLab` 使用 remote MCP：
+
+1. 建立/連線指向 remote HTTPS `/mcp` 的 ChatGPT App / connector；
+2. 完成該 App / connector 的 OAuth；
+3. 取得既有 App / connector ID；
+4. 用該 ID 與 remote MCP URL 執行 `scripts/build_chatgpt_variant.py`；
+5. import/install generated marketplace root。
+
+Generated marketplace 名稱是 `ademkao-gitlab-chatgpt`，因此 plugin reference 是：
+
+```text
+gitlab@ademkao-gitlab-chatgpt
+```
+
+Generated plugin 使用 `apps: "./.app.json"`，而且不包含 `mcpServers` 與 `.mcp.json`，避免 localhost fallback 和 remote App binding 競爭。
 
 完整設定與 troubleshooting 請看 `docs/chatgpt-app.zh-TW.md`。

@@ -10,7 +10,7 @@
 1. GitLab Plugin：workflow skills、安全 routing 與 local `git` / `glab` fallback；
 2. Self-hosted GitLab MCP Server：直接透過 GitLab REST API 操作 GitLab。
 
-> **狀態：** v0.5.2 / early preview。
+> **狀態：** v0.5.3 / early preview。
 >
 > **第三方專案：** 本 repo 並非 GitLab 或 OpenAI 官方專案，也不代表獲得兩者背書。
 
@@ -156,7 +156,7 @@ OAuth mode 下，未登入呼叫 `/mcp` 會回 `401`，`WWW-Authenticate` 會指
 
 ## localhost `.mcp.json` fallback
 
-Portable plugin 刻意保留：
+Portable source plugin 刻意保留：
 
 ```text
 plugins/gitlab/.mcp.json -> http://127.0.0.1:3333/mcp
@@ -164,11 +164,13 @@ plugins/gitlab/.mcp.json -> http://127.0.0.1:3333/mcp
 
 這是 bundled server 跑在同一台 Codex host 時使用的 **local fallback**。不要為了 remote OAuth 而把 source `.mcp.json` 改成 maintainer 私有或固定公開 URL。
 
+Repo root marketplace（`ademkao-codex-plugins`）指向的就是這份 portable source plugin。因此安裝 root marketplace **不會**把另外新增並完成 OAuth 的 remote MCP connection 自動變成 `@GitLab` 的 tool binding。
+
 Local working-tree state、commit、push 仍由 local `git` / `glab` 負責。
 
-## Optional workspace binding helper
+## ChatGPT App-bound marketplace helper
 
-`plugins/gitlab/workspace-binding/.app.json.example` 與 `scripts/build_chatgpt_variant.py` 只處理一個特定情境：你**已經有** workspace App / connector ID，想產生一份 ignored plugin copy，把該 ID 綁進 `.app.json`。
+`plugins/gitlab/workspace-binding/.app.json.example` 與 `scripts/build_chatgpt_variant.py` 只處理一個特定情境：你**已經有**指向 remote MCP server 的 ChatGPT workspace App / connector ID，現在要產生一個真正可安裝、且明確綁定該 App 的 plugin marketplace。
 
 它們**不是 OpenAI 原生 App Template**，也不是 personal/Codex direct MCP 安裝所需步驟，更不會建立或 publish ChatGPT App。
 
@@ -180,13 +182,29 @@ python3 scripts/build_chatgpt_variant.py \
   --mcp-url https://gitlab-mcp.example.com/mcp
 ```
 
-Ignored `dist/gitlab-chatgpt/` 會包含：
+預設輸出：
 
-- `.app.json`：existing workspace App / connector binding；
-- copied `plugin.json`：加入 `apps: "./.app.json"`；
-- `.chatgpt-setup.json`：明確標記這只是 workspace binding helper，而且**不是** managed App Template。
+```text
+dist/gitlab-chatgpt-marketplace/
+  .agents/plugins/marketplace.json
+  plugins/gitlab/
+    .app.json
+    .chatgpt-setup.json
+    .codex-plugin/plugin.json
+    skills/...
+```
 
-Source plugin 與 localhost `.mcp.json` 都不會被修改。
+Generated marketplace 名稱是 `ademkao-gitlab-chatgpt`，所以 plugin reference 是：
+
+```text
+gitlab@ademkao-gitlab-chatgpt
+```
+
+Generated ChatGPT plugin 會刻意保留 `apps: "./.app.json"`，但**不包含** `mcpServers`，也**不包含** `.mcp.json`。這樣 portable localhost fallback 就不會和 connected App binding 競爭。
+
+當你要讓 `@GitLab` 使用 remote App 時，應 import / install **generated marketplace root**，而不是 repo root 的 `ademkao-codex-plugins` marketplace。Source plugin 與 source localhost `.mcp.json` 都不會被修改。
+
+Generated output 是 workspace-specific，而且預設在 gitignored `dist/`。除非你清楚知道 workspace binding 的影響，否則不要把它 commit 到 public source repo。
 
 ## Managed workspace App Template 是另一個平台功能
 
@@ -272,7 +290,7 @@ packages/mcp-server/
   src/register-tools.ts                 # core GitLab tools
   src/register-v05-tools.ts             # repository/MR/pipeline tools
   migrations/001_oauth_postgres.sql
-scripts/build_chatgpt_variant.py        # optional workspace binding helper
+scripts/build_chatgpt_variant.py        # 產生 App-bound ChatGPT marketplace artifact
 scripts/chatgpt_binding.py              # remote URL validation helpers
 scripts/chatgpt_mcp_doctor.py           # live OAuth/MCP deployment doctor
 Dockerfile
@@ -292,7 +310,7 @@ npm install
 npm run check
 ```
 
-CI 會驗證 repo structure 與 workspace binding helper、拒絕 unsafe remote URL，啟動 PostgreSQL 17 跑 multi-replica OAuth integration test，再執行 TypeScript test/build 與 production Docker build。
+CI 會驗證 repo structure 與 generated ChatGPT marketplace artifact，確認 App-bound plugin 不可能殘留 source localhost MCP dependency、拒絕 unsafe remote URL，啟動 PostgreSQL 17 跑 multi-replica OAuth integration test，再執行 TypeScript test/build 與 production Docker build。
 
 ## 文件
 

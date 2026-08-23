@@ -14,10 +14,26 @@ Main skills:
 - `glab-address-comments` — address MR feedback and push fixes.
 - `glab-fix-ci` — diagnose failed GitLab pipelines/jobs and publish a fix.
 
-## Important: Codex MCP vs ChatGPT plugin binding
+## Important: portable marketplace vs ChatGPT App binding
 
-The portable source plugin keeps `./.mcp.json` pointed at `http://127.0.0.1:3333/mcp` as a same-host Codex fallback.
+The portable source plugin keeps `./.mcp.json` pointed at `http://127.0.0.1:3333/mcp` as a same-host Codex fallback. The repository root marketplace, `ademkao-codex-plugins`, installs this portable source package.
 
-A remote MCP server that you add and authenticate separately in MCP settings does **not** automatically replace that packaged localhost dependency for `@GitLab` in ChatGPT. To use the ChatGPT plugin with a remote MCP deployment, connect/create the corresponding ChatGPT App/connector first, then build/install the workspace-bound variant with `scripts/build_chatgpt_variant.py`. The generated ChatGPT variant uses the App binding only and removes the source localhost MCP dependency.
+A remote MCP server that you add and authenticate separately in MCP settings does **not** automatically replace that packaged localhost dependency for `@GitLab` in ChatGPT.
+
+To use `@GitLab` with a remote MCP deployment:
+
+1. create/connect the ChatGPT App/connector for the remote HTTPS `/mcp` endpoint;
+2. complete OAuth for that App/connector;
+3. obtain its existing App/connector ID;
+4. run `scripts/build_chatgpt_variant.py` with that ID and remote MCP URL; and
+5. import/install the generated marketplace root.
+
+The generated marketplace is `ademkao-gitlab-chatgpt`, so the generated plugin reference is:
+
+```text
+gitlab@ademkao-gitlab-chatgpt
+```
+
+Its plugin uses `apps: "./.app.json"` and contains neither `mcpServers` nor `.mcp.json`. This prevents the localhost fallback from competing with the remote App binding.
 
 See `docs/chatgpt-app.md` for the complete setup and troubleshooting flow.

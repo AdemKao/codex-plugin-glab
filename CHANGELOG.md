@@ -6,16 +6,36 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 
 ## [Unreleased]
 
-### Fixed
-
-- CIMD native-client loopback redirects can now match ChatGPT/Codex-style ephemeral ports when metadata registers a portless `http://127.0.0.1/...` or `http://localhost/...` callback. The exception remains limited to the same loopback host and path with no credentials, query, or fragment; public and explicitly ported redirects remain exact-match only.
-
 ### Planned
 
 - Capability probing and compatibility fixtures across more GitLab Self-Managed versions.
 - More granular per-tool and per-project authorization policy.
 - Observability, audit events, and operational metrics for hosted deployments.
 - Additional GitLab release/member/milestone workflows.
+
+## [0.5.3] - 2026-08-23
+
+### Fixed
+
+- Fixed the ChatGPT package-selection gap where PR #15 produced a correct App-only plugin copy but the repository root marketplace still installed the portable localhost-oriented source package. OAuth could therefore succeed on a separately-added remote MCP server while `@GitLab` still exposed no GitLab tools.
+- `scripts/build_chatgpt_variant.py` now emits a complete workspace-specific marketplace source under `dist/gitlab-chatgpt-marketplace/`, including `.agents/plugins/marketplace.json` and the App-bound `plugins/gitlab` copy.
+- The generated ChatGPT plugin contains `apps: "./.app.json"`, no `mcpServers`, and no `.mcp.json`, preventing the source localhost fallback from competing with the workspace App binding.
+- CIMD native-client loopback redirects can now match ChatGPT/Codex-style ephemeral ports when metadata registers a portless `http://127.0.0.1/...` or `http://localhost/...` callback. The exception remains limited to the same loopback host and path with no credentials, query, or fragment; public and explicitly ported redirects remain exact-match only.
+
+### Changed
+
+- The generated marketplace is named `ademkao-gitlab-chatgpt`, with plugin reference `gitlab@ademkao-gitlab-chatgpt`, so it is explicitly distinct from the portable repository marketplace `ademkao-codex-plugins`.
+- Generated `.chatgpt-setup.json` records that the artifact is workspace-specific, requires an existing ChatGPT App/connector, requires explicit marketplace import/installation, and does not modify an already-installed plugin.
+- Generated output now includes a README warning that workspace-specific App/connector IDs should live in an appropriate controlled marketplace source unless their portability is explicitly documented.
+- Repository validation now builds and inspects the generated marketplace layout, verifies its App binding and marketplace path/policy, and rejects any generated package that retains the localhost MCP dependency.
+- English and Traditional Chinese root/plugin READMEs, ChatGPT integration docs, and the setup skill now distinguish direct Codex/native MCP setup, the portable root marketplace/local fallback, and the workspace-specific ChatGPT App-bound marketplace source.
+- Synchronized `VERSION`, plugin manifest, MCP package, and MCP runtime-reported version at v0.5.3.
+
+### Security
+
+- The workspace binding helper continues to reject HTTP, localhost, loopback, private/link-local literal IPs, embedded credentials, query/fragment data, and non-`/mcp` endpoints.
+- The source repository does not embed a maintainer- or workspace-specific App/connector ID; generated workspace-specific output remains under ignored `dist/` by default.
+- The live MCP doctor continues to reject non-public DNS resolutions and verifies OAuth discovery metadata and the unauthenticated `/mcp` challenge before connection.
 
 ## [0.5.2] - 2026-08-23
 
