@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a deployed remote MCP endpoint before binding it to ChatGPT."""
+"""Validate a deployed remote OAuth MCP endpoint before client installation/binding."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def fail(message: str) -> "NoReturn":
 
 def get_json(url: str) -> dict:
     opener = build_opener(NoRedirect)
-    request = Request(url, headers={"Accept": "application/json", "User-Agent": "codex-plugin-glab-doctor/0.5.1"})
+    request = Request(url, headers={"Accept": "application/json", "User-Agent": "codex-plugin-glab-doctor/0.5.2"})
     try:
         with opener.open(request, timeout=10) as response:
             if response.status != 200:
@@ -48,7 +48,7 @@ def verify_mcp_challenge(mcp_url: str) -> None:
         headers={
             "Accept": "application/json, text/event-stream",
             "Content-Type": "application/json",
-            "User-Agent": "codex-plugin-glab-doctor/0.5.1",
+            "User-Agent": "codex-plugin-glab-doctor/0.5.2",
         },
     )
     try:
@@ -95,7 +95,7 @@ def doctor(mcp_url: str) -> None:
 
     verify_mcp_challenge(mcp_url)
 
-    print("ChatGPT MCP doctor passed")
+    print("Remote OAuth MCP doctor passed")
     print(f"MCP URL: {mcp_url}")
     print(f"Protected Resource Metadata: {protected_url}")
     print(f"Authorization Server Metadata: {auth_metadata_url}")
@@ -103,7 +103,7 @@ def doctor(mcp_url: str) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Validate a remote OAuth MCP deployment for ChatGPT.")
+    parser = argparse.ArgumentParser(description="Validate a remote OAuth MCP deployment for Codex/ChatGPT clients.")
     parser.add_argument("--mcp-url", required=True, help="public HTTPS MCP URL ending in /mcp")
     return parser.parse_args()
 
