@@ -2,7 +2,7 @@
 
 [English](capability-matrix.md) | [繁體中文](capability-matrix.zh-TW.md)
 
-## Server capabilities in v0.5.1
+## Server capabilities in v0.5.2
 
 | Capability | Bundled MCP server | Notes |
 | --- | --- | --- |
@@ -26,7 +26,7 @@
 
 ## Authentication and deployment
 
-| Capability | v0.5.1 |
+| Capability | v0.5.2 |
 | --- | --- |
 | Shared service identity | Yes (`MCP_AUTH_MODE=shared-token`) |
 | Per-user GitLab OAuth | Yes (`MCP_AUTH_MODE=oauth`) |
@@ -45,22 +45,25 @@
 | Automatic GitLab token refresh | Yes |
 | Docker Compose PostgreSQL profile | Yes |
 | PostgreSQL CI integration tests | Yes |
-| ChatGPT remote URL validator | Yes | HTTPS `/mcp`; rejects unsafe local/private literal targets |
-| ChatGPT live MCP doctor | Yes | Validates OAuth metadata + unauthenticated challenge |
-| Workspace-specific `.app.json` generator | Yes | Requires explicit existing ChatGPT App/connector ID |
-| Automatic creation of arbitrary ChatGPT Custom MCP App during plugin install | No | Platform consent/admin boundary; explicitly out of repo control |
+| Direct personal/Codex remote MCP setup | Yes | **Add server** -> Streamable HTTP -> HTTPS `/mcp` -> OAuth discovery/authentication |
+| OAuth discovery from unauthenticated `/mcp` | Yes | `401` challenge points to Protected Resource Metadata |
+| Localhost source `.mcp.json` fallback | Yes | Remains `http://127.0.0.1:3333/mcp` for same-host/local use |
+| Remote URL validator / live MCP doctor | Yes | HTTPS `/mcp`, discovery metadata, unauthenticated challenge, DNS/public-address checks |
+| Workspace binding helper | Yes, optional | Requires an already-existing workspace app/connector ID |
+| Repository helper is an OpenAI managed App Template | No | Explicitly not claimed; managed templates are a separate platform feature |
+| Automatic creation/publishing of arbitrary ChatGPT workspace apps | No | Platform user/admin consent and governance boundary |
 
 ## Client surfaces
 
 | Surface | Integration path |
 | --- | --- |
-| Codex | Portable plugin + localhost/remote bundled MCP; local `git` / `glab` fallback |
-| ChatGPT | Public HTTPS MCP -> explicit Custom MCP App creation/consent -> generated workspace app-bound plugin variant |
-| Other MCP clients | `/mcp` with shared bearer or OAuth discovery/CIMD/DCR |
+| Personal Codex / ChatGPT desktop Codex host | **Add server** -> Streamable HTTP -> remote HTTPS `/mcp` -> OAuth discovery; localhost `.mcp.json` remains local fallback |
+| Managed ChatGPT workspace | Use the platform's supported app/admin flow; managed App Templates are separate. Repository workspace-binding helper is optional only after an app/connector already exists |
+| Other MCP clients | `/mcp` with shared bearer or OAuth discovery/CIMD/DCR according to client support |
 
-The portable source `.mcp.json` remains `http://127.0.0.1:3333/mcp` for local Codex use. ChatGPT remote binding uses `scripts/chatgpt_mcp_doctor.py` and `scripts/build_chatgpt_variant.py --app-id ... --mcp-url https://.../mcp` without modifying that source configuration.
+The portable source `.mcp.json` remains `http://127.0.0.1:3333/mcp`; direct remote OAuth does not require changing it. `scripts/build_chatgpt_variant.py` is an optional workspace binding helper, not the primary install path and not an OpenAI managed App Template.
 
-Client product availability, plan limits, approval UI, and write permissions are controlled by each MCP client and can change independently of this repository.
+Client product availability, plan limits, approval UI, managed-app features, and write permissions are controlled by each MCP client/platform and can change independently of this repository.
 
 ## Policy layers
 
