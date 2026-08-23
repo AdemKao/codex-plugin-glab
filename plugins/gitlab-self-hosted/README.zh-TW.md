@@ -30,7 +30,7 @@ Portable reference：
 gitlab-self-hosted@ademkao-codex-plugins
 ```
 
-Portable package 現在刻意維持 **endpoint-unbound**：不包含 `mcpServers`、不自動載入 `.mcp.json`，也不包含 workspace-specific App binding。
+Portable package 刻意維持 **endpoint-unbound**：不包含 `mcpServers`、不自動載入 `.mcp.json`，也不包含使用者／workspace-specific 的 ChatGPT MCP connection binding。
 
 明確產生的 connection variants：
 
@@ -81,17 +81,24 @@ gitlab-self-hosted@ademkao-gitlab-remote
 
 Helper 會驗證 URL，並只把該 URL 寫進 generated artifact；committed portable plugin 仍維持 endpoint-unbound。
 
-### ChatGPT custom MCP App
+### ChatGPT MCP connection binding
 
-ChatGPT 的 MCP endpoint 應設定在 custom MCP App / connector；portable plugin 不持有、也不修改 App 的 URL。
+在 ChatGPT 裡，「安裝 portable repo plugin」和「建立／授權 remote MCP connection」是兩個不同的 platform operation。看得到 `@GitLab Self-Hosted` **不代表**該 plugin 已自動綁到使用者自己的 MCP connection。
 
-App 已建立並完成 OAuth 設定後，再用既有 App / connector ID 產生綁定版本：
+ChatGPT 正確流程：
+
+1. 在 ChatGPT platform UI 建立／連接 remote MCP endpoint，例如 `https://gitlab-mcp.example.com/mcp`。
+2. 完成 OAuth，並確認該 connection 能 scan / expose GitLab tools。
+3. 完整複製該 underlying MCP App / connection 的 platform-generated **technical ID**。
+4. 用 technical ID 產生 connection-bound marketplace：
 
 ```bash
 python3 scripts/build_chatgpt_variant.py \
-  --app-id YOUR_EXISTING_WORKSPACE_APP_OR_CONNECTOR_ID \
+  --connection-id YOUR_CHATGPT_MCP_CONNECTION_TECHNICAL_ID \
   --mcp-url https://gitlab-mcp.example.com/mcp
 ```
+
+`--app-id` 仍保留作為 `--connection-id` 的 backwards-compatible alias。
 
 Import/install generated marketplace 後使用：
 
@@ -99,6 +106,8 @@ Import/install generated marketplace 後使用：
 gitlab-self-hosted@ademkao-gitlab-chatgpt
 ```
 
-Generated ChatGPT plugin 使用 `apps: "./.app.json"`，而且不包含 `mcpServers` 與 `.mcp.json`。`--mcp-url` 會被驗證並記錄為該 App 預期已設定的 endpoint；真正的 plugin binding 是 App / connector ID。
+Generated ChatGPT plugin 使用 `apps: "./.app.json"`，而且不包含 `mcpServers` 與 `.mcp.json`。`--mcp-url` 只負責驗證並記錄 existing connection 預期使用的 endpoint；真正的 plugin dependency 是 connection technical ID。
+
+產生 artifact 不會建立 MCP connection、不會執行 OAuth，也不會修改已安裝的 portable plugin；必須明確 import/install generated marketplace。
 
 完整設定、migration 與 troubleshooting 請看 `docs/chatgpt-app.zh-TW.md`。
