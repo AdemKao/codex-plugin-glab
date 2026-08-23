@@ -1,7 +1,7 @@
 {
   "name": "gitlab-self-hosted",
-  "version": "0.5.6",
-  "description": "Inspect and operate GitLab projects through the bundled production-oriented self-hosted MCP server with safe shared-token or per-user OAuth workflows for Codex and ChatGPT.",
+  "version": "0.5.7",
+  "description": "Inspect and operate GitLab projects through the hosted GitLab Self-Hosted MCP endpoint with remote HTTPS OAuth by default, while retaining an explicit localhost development fallback.",
   "author": {
     "name": "AdemKao",
     "url": "https://github.com/AdemKao"
@@ -24,10 +24,11 @@
     "chatgpt"
   ],
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "GitLab Self-Hosted",
-    "shortDescription": "Self-hosted GitLab MCP with OAuth and CIMD",
-    "longDescription": "Use the bundled self-hosted GitLab MCP server to inspect projects, review merge requests, manage issues, operate repository files and pipelines, and publish controlled changes to GitLab.com or GitLab Self-Managed. The portable plugin intentionally does not bind an MCP endpoint or a user-specific ChatGPT MCP connection: configure the appropriate local, remote, or ChatGPT connection-bound variant for your environment. The distinct gitlab-self-hosted package identifier avoids collision with the OpenAI-curated GitLab plugin.",
+    "shortDescription": "GitLab MCP over hosted HTTPS + OAuth",
+    "longDescription": "Install the GitHub marketplace root and use GitLab immediately through the bundled direct MCP binding to https://gitlab-mcp.blacmarcs.com/mcp. The MCP client performs OAuth discovery and GitLab authorization over remote HTTPS; users do not need to run the MCP server locally, build a generated marketplace variant, or maintain a second repository. A localhost-bound generated variant remains available only as a development fallback. The distinct gitlab-self-hosted identifier avoids collision with the OpenAI-curated GitLab plugin.",
     "developerName": "AdemKao",
     "category": "Developer Tools",
     "capabilities": [

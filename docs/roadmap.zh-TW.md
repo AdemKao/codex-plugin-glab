@@ -31,7 +31,7 @@
 
 已完成：
 
-- CIMD（Client ID Metadata Documents）+ DCR fallback；
+- CIMD + DCR fallback；
 - CIMD SSRF / redirect / size / timeout / host validation；
 - pluggable OAuth store contract；
 - encrypted PostgreSQL OAuth/session backend；
@@ -45,31 +45,34 @@
 - pipeline create/retry/cancel tools；
 - Docker Compose PostgreSQL profile 與 migration 文件。
 
-## v0.5.1 — Initial workspace binding helper
+## v0.5.1–v0.5.6 — Installation / binding experiments
+
+這幾個版本完成：
+
+- remote MCP doctor 與 public HTTPS `/mcp` URL validation；
+- direct MCP OAuth installation guidance；
+- workspace/App binding helper experiments；
+- package identity 改成 `gitlab-self-hosted`；
+- local、custom-remote、App-bound generated variants；
+- ChatGPT MCP connection-ID compatibility helpers；
+- unsafe URL rejection 與 generated binding artifact regression tests。
+
+這些版本也暴露了一個重要 UX 問題：如果 marketplace-root plugin 自己沒有 direct remote MCP binding，使用者仍必須另外設定或產生第二層 binding，plugin 才能真正 expose GitLab tools。
+
+## v0.5.7 — Hosted MCP 成為 marketplace-root 預設
 
 已完成：
 
-- live remote MCP doctor，驗證 Protected Resource Metadata、Authorization Server Metadata 與未登入 `/mcp` OAuth challenge；
-- public HTTPS `/mcp` URL validation 與 unsafe target rejection；
-- initial workspace-specific `.app.json` binding generator；
-- 保留 local Codex 使用的 localhost `.mcp.json`；
-- CI 驗證 helper generation 與 unsafe URL rejection。
-
-v0.5.2 重新整理 v0.5.1 引入的產品定位，避免 optional binding helper 被誤解成 personal/Codex 的主要安裝方式，或被誤稱為 OpenAI 原生 App Template。
-
-## v0.5.2 — Direct Codex MCP / OAuth installation UX
-
-已完成：
-
-- personal/Codex remote setup 明確改成 **Add server -> Streamable HTTP -> remote HTTPS `/mcp` -> OAuth discovery/authentication**；
-- direct remote OAuth 不再需要 `.app.json`、workspace App / connector ID 或 `build_chatgpt_variant.py`；
-- portable `plugins/gitlab/.mcp.json` 保留 `http://127.0.0.1:3333/mcp`，作為 same-host local fallback；
-- helper input 從 `app-template/.app.json.example` 移到 `workspace-binding/.app.json.example`，消除 App Template 命名歧義；
-- `build_chatgpt_variant.py` 重新定位成 optional **workspace binding helper**，且要求 existing workspace App / connector ID；
-- generated helper metadata 與 CI validation 明確聲明 output 不是 OpenAI managed App Template；
-- managed workspace App Templates 獨立說明為 administrator / platform feature，而不是本 repo 提供的 template；
-- 同步英文 / 繁中 README、ChatGPT/Codex setup docs、setup skill、capability matrix、roadmap、CHANGELOG；
-- `VERSION`、plugin manifest、MCP package 與 MCP runtime version 同步到 `0.5.2`。
+- repository-root `gitlab-self-hosted` 直接包含 `mcpServers: "./.mcp.json"`；
+- committed `.mcp.json` 直接指向 `https://gitlab-mcp.blacmarcs.com/mcp`；
+- 一般 ChatGPT / Codex 安裝流程變成 root marketplace -> remote HTTPS MCP -> OAuth；
+- 預設流程不需要 local MCP process、generated marketplace variant、第二個 repo 或 ChatGPT connection technical ID；
+- `build_local_variant.py` 保留作 development-only override，指向 `http://127.0.0.1:3333/mcp`；
+- `build_personal_variant.py` 保留作 optional custom-remote override；
+- `build_chatgpt_variant.py` 保留作 optional existing-App/connection compatibility path，而且 generated output 會移除 source direct MCP binding；
+- validator 會鎖定 hosted root endpoint，並測試全部 override invariant；
+- 英文 / 繁中安裝文件、capability matrix、setup skill 與 changelog 同步；
+- release metadata 同步到 `0.5.7`。
 
 ## v0.6 — Policy、observability、compatibility
 
