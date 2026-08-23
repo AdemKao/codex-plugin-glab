@@ -103,9 +103,15 @@ function emptyStore(): OAuthStoreData {
   };
 }
 
+function clone<T>(value: T): T {
+  return structuredClone(value);
+}
+
 /**
  * Encrypted single-process file backend. This backend intentionally remains
  * simple and is not safe for multiple server replicas writing the same file.
+ * Read/write boundaries clone records so caller mutation cannot mutate the
+ * persisted in-memory state before an explicit update/rotation operation.
  */
 export class OAuthStore implements OAuthStoreBackend {
   private data: OAuthStoreData;
@@ -170,17 +176,18 @@ export class OAuthStore implements OAuthStoreBackend {
   }
 
   putClient(client: OAuthClientRecord): void {
-    this.data.clients[client.clientId] = client;
+    this.data.clients[client.clientId] = clone(client);
     this.save();
   }
 
   getClient(clientId: string): OAuthClientRecord | undefined {
-    return this.data.clients[clientId];
+    const client = this.data.clients[clientId];
+    return client ? clone(client) : undefined;
   }
 
   putTransaction(transaction: OAuthTransactionRecord): void {
     this.cleanup();
-    this.data.transactions[transaction.id] = transaction;
+    this.data.transactions[transaction.id] = clone(transaction);
     this.save();
   }
 
@@ -190,12 +197,12 @@ export class OAuthStore implements OAuthStoreBackend {
     if (!transaction) return undefined;
     delete this.data.transactions[id];
     this.save();
-    return transaction;
+    return clone(transaction);
   }
 
   putAuthorizationCode(code: OAuthAuthorizationCodeRecord): void {
     this.cleanup();
-    this.data.authorizationCodes[code.codeHash] = code;
+    this.data.authorizationCodes[code.codeHash] = clone(code);
     this.save();
   }
 
@@ -206,37 +213,40 @@ export class OAuthStore implements OAuthStoreBackend {
     if (!code) return undefined;
     delete this.data.authorizationCodes[hash];
     this.save();
-    return code;
+    return clone(code);
   }
 
   putSession(session: OAuthSessionRecord): void {
     this.cleanup();
-    this.data.sessions[session.id] = session;
+    this.data.sessions[session.id] = clone(session);
     this.save();
   }
 
   getSessionById(sessionId: string): OAuthSessionRecord | undefined {
     this.cleanup();
-    return this.data.sessions[sessionId];
+    const session = this.data.sessions[sessionId];
+    return session ? clone(session) : undefined;
   }
 
   getSessionByAccessToken(rawToken: string): OAuthSessionRecord | undefined {
     this.cleanup();
     const hash = tokenHash(rawToken);
-    return Object.values(this.data.sessions).find((session) => session.accessTokenHash === hash);
+    const session = Object.values(this.data.sessions).find((entry) => entry.accessTokenHash === hash);
+    return session ? clone(session) : undefined;
   }
 
   getSessionByRefreshToken(rawToken: string): OAuthSessionRecord | undefined {
     this.cleanup();
     const hash = tokenHash(rawToken);
-    return Object.values(this.data.sessions).find((session) => session.refreshTokenHash === hash);
+    const session = Object.values(this.data.sessions).find((entry) => entry.refreshTokenHash === hash);
+    return session ? clone(session) : undefined;
   }
 
   updateSession(session: OAuthSessionRecord): void {
     if (!this.data.sessions[session.id]) {
       throw new Error("OAuth session no longer exists");
     }
-    this.data.sessions[session.id] = session;
+    this.data.sessions[session.id] = clone(session);
     this.save();
   }
 
@@ -244,7 +254,7 @@ export class OAuthStore implements OAuthStoreBackend {
     this.cleanup();
     const current = this.data.sessions[session.id];
     if (!current || current.refreshTokenHash !== tokenHash(rawRefreshToken)) return false;
-    this.data.sessions[session.id] = session;
+    this.data.sessions[session.id] = clone(session);
     this.save();
     return true;
   }
