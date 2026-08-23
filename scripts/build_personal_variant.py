@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build a personal GitLab plugin marketplace with a remote MCP endpoint.
 
-The portable source plugin keeps its localhost MCP fallback for local Codex
-development. This helper creates a separate, user-specific marketplace source
-whose copied plugin points at a validated public HTTPS MCP endpoint instead.
-It does not require a ChatGPT App/connector ID or an OpenAI managed App.
+The portable source plugin is intentionally endpoint-unbound. This helper creates
+a separate, user-specific marketplace source whose copied plugin points at a
+validated public HTTPS MCP endpoint. It does not require a ChatGPT App/connector
+ID or an OpenAI managed App.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from chatgpt_binding import BindingValidationError, validate_remote_mcp_url
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ID = "gitlab-self-hosted"
 SOURCE_PLUGIN = ROOT / "plugins" / PLUGIN_ID
+LOCAL_MCP_TEMPLATE = SOURCE_PLUGIN / "workspace-binding" / ".mcp.local.json.example"
 DEFAULT_OUTPUT = ROOT / "dist" / "gitlab-remote-marketplace"
 GENERATED_MARKETPLACE_NAME = "ademkao-gitlab-remote"
 GENERATED_PLUGIN_RELATIVE = Path("plugins") / PLUGIN_ID
@@ -63,9 +64,10 @@ personal remote MCP deployment.
 - Plugin reference: `{PLUGIN_ID}@{GENERATED_MARKETPLACE_NAME}`
 - Remote MCP endpoint: `{mcp_url}`
 
-The generated plugin keeps `mcpServers: \"./.mcp.json\"`, with `.mcp.json`
-pointing at the remote HTTPS endpoint. The client performs the server's OAuth
-discovery and GitLab authorization flow when the plugin is first used.
+The portable source plugin is endpoint-unbound. This generated plugin explicitly
+adds `mcpServers: \"./.mcp.json\"`, with `.mcp.json` pointing at the selected
+remote HTTPS endpoint. The client performs the server's normal OAuth discovery
+and GitLab authorization flow when the plugin is first used.
 
 This artifact does not contain a workspace App binding, does not require an
 App/connector ID, and is not an OpenAI managed App Template. Keep this
@@ -77,6 +79,8 @@ your organization.
 def build(mcp_url: str, output: Path, force: bool) -> None:
     if not SOURCE_PLUGIN.is_dir():
         fail(f"source plugin not found: {SOURCE_PLUGIN}")
+    if not LOCAL_MCP_TEMPLATE.is_file():
+        fail(f"local MCP template not found: {LOCAL_MCP_TEMPLATE}")
 
     try:
         mcp_url = validate_remote_mcp_url(mcp_url)
@@ -93,26 +97,25 @@ def build(mcp_url: str, output: Path, force: bool) -> None:
     generated_plugin.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(SOURCE_PLUGIN, generated_plugin)
 
-    helper_dir = generated_plugin / "workspace-binding"
-    if helper_dir.exists():
-        shutil.rmtree(helper_dir)
-
-    mcp_path = generated_plugin / ".mcp.json"
-    mcp_manifest = load_json(mcp_path, "portable MCP manifest")
+    mcp_manifest = load_json(LOCAL_MCP_TEMPLATE, "local MCP template")
     server = mcp_manifest.get("mcpServers", {}).get("gitlab")
     if not isinstance(server, dict):
-        fail("portable MCP manifest must define mcpServers.gitlab")
+        fail("local MCP template must define mcpServers.gitlab")
     server["url"] = mcp_url
-    write_json(mcp_path, mcp_manifest)
+    write_json(generated_plugin / ".mcp.json", mcp_manifest)
 
     manifest_path = generated_plugin / ".codex-plugin" / "plugin.json"
     manifest = load_json(manifest_path, "plugin manifest")
     if manifest.get("name") != PLUGIN_ID:
         fail(f"source plugin manifest name must be '{PLUGIN_ID}'")
-    if manifest.get("mcpServers") != "./.mcp.json":
-        fail("portable plugin manifest must point to ./.mcp.json")
-    manifest.pop("apps", None)
+    if "mcpServers" in manifest or "apps" in manifest:
+        fail("portable plugin manifest must be endpoint-unbound")
+    manifest["mcpServers"] = "./.mcp.json"
     write_json(manifest_path, manifest)
+
+    helper_dir = generated_plugin / "workspace-binding"
+    if helper_dir.exists():
+        shutil.rmtree(helper_dir)
 
     setup = {
         "profile": "personal-remote-mcp",
@@ -125,7 +128,8 @@ def build(mcp_url: str, output: Path, force: bool) -> None:
         "plugin_reference": f"{PLUGIN_ID}@{GENERATED_MARKETPLACE_NAME}",
         "requires_chatgpt_app_binding": False,
         "requires_explicit_oauth": True,
-        "source_local_mcp_replaced": True,
+        "source_portable_unbound": True,
+        "endpoint_configured_explicitly": True,
         "doctor_command": f"python3 scripts/chatgpt_mcp_doctor.py --mcp-url {mcp_url}",
     }
     write_json(generated_plugin / ".chatgpt-setup.json", setup)
@@ -151,7 +155,7 @@ def build(mcp_url: str, output: Path, force: bool) -> None:
     print(f"Built personal GitLab Self-Hosted remote marketplace: {output}")
     print(f"Plugin reference: {PLUGIN_ID}@{GENERATED_MARKETPLACE_NAME}")
     print(f"Remote MCP URL: {mcp_url}")
-    print("The portable source plugin and localhost MCP fallback were not modified.")
+    print("The portable source plugin remains endpoint-unbound.")
     print("The generated plugin does not require a ChatGPT App/connector ID.")
     print("Import/install this generated marketplace before using its plugin reference.")
 
