@@ -27,7 +27,7 @@
   "interface": {
     "displayName": "GitLab Self-Hosted",
     "shortDescription": "GitLab via registered MCP App + OAuth",
-    "longDescription": "Use GitLab workflow skills with an OAuth-enabled MCP server. For ChatGPT plugin usage, register the remote HTTPS /mcp server in Developer mode, copy the platform-generated plugin_asdk_app... technical ID, and build the App-bound plugin variant so its manifest declares apps: ./ .app.json. The public source package intentionally stays endpoint-neutral because registered App IDs are workspace-specific. Direct remote MCP and localhost remain explicit fallback/development paths.",
+    "longDescription": "Use GitLab workflow skills with an OAuth-enabled MCP server. For ChatGPT plugin usage, register the remote HTTPS /mcp server in Developer mode, copy the platform-generated plugin_asdk_app... technical ID, and build the App-bound plugin variant so its manifest declares apps: ./.app.json. The public source package intentionally stays endpoint-neutral because registered App IDs are workspace-specific. Direct remote MCP and localhost remain explicit fallback/development paths.",
     "developerName": "AdemKao",
     "category": "Developer Tools",
     "capabilities": [
