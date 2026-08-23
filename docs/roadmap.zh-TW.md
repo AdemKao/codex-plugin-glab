@@ -8,53 +8,64 @@
 
 - bundled TypeScript MCP Server；
 - GitLab.com / Self-Managed host 選擇；
-- server-side PAT / bearer 連 GitLab REST API；
-- projects、groups、issues、MR、branches、commits、pipelines、jobs、traces read tools；
+- server-side PAT / bearer authentication；
+- 核心 project/group/issue/MR/repository/CI read tools；
 - 受控的 issue/MR/branch writes 與 MR merge；
-- project allowlist；
-- read-only、merge-off 安全預設；
-- MCP endpoint bearer protection；
-- Docker / Compose deployment；
-- tests、build validation 與 automated release workflow。
+- project allowlist、read-only / merge-off 安全預設；
+- Docker deployment、tests 與 release automation。
 
 ## v0.4.0 — Per-user identity and OAuth
 
 已完成：
 
-- built-in MCP Protected Resource Metadata 與 OAuth authorization-server discovery；
-- per-user GitLab OAuth identity / token mapping；
-- downstream authorization-code + PKCE S256；
-- 獨立的 upstream GitLab authorization-code + PKCE S256；
-- Dynamic Client Registration compatibility；
-- MCP access / refresh token issuance 與 rotation；
-- GitLab refresh token 自動處理；
-- encrypted persistent OAuth state；
-- `gitlab:read` / `gitlab:write` 獨立授權，而且 server-side policy 仍是最高限制；
-- Docker persistent encrypted single-node OAuth store；
-- 保留 backward-compatible shared-token mode。
+- Protected Resource Metadata 與 Authorization Server Metadata；
+- per-user GitLab OAuth identity mapping；
+- downstream / upstream PKCE S256；
+- DCR compatibility；
+- MCP access / refresh token 與 rotation；
+- GitLab token 自動 refresh；
+- encrypted single-node OAuth persistence；
+- `gitlab:read` / `gitlab:write` 獨立 enforcement。
 
-## v0.5 — OAuth interoperability 與更深 GitLab workflows
+## v0.5.0 — Production OAuth 與更深 GitLab workflows
+
+已完成：
+
+- CIMD（Client ID Metadata Documents）+ DCR fallback；
+- CIMD SSRF / redirect / size / timeout / host validation；
+- pluggable OAuth store contract；
+- encrypted PostgreSQL OAuth/session backend；
+- 跨 replica atomic OAuth state / authorization-code consume；
+- atomic refresh-token rotation；
+- concurrent GitLab token refresh recovery；
+- PostgreSQL 17 CI integration tests；
+- 完整 OAuth authorize/callback/token/refresh smoke tests；
+- repository tree/file read 與 file create/update/delete tools；
+- MR approve/unapprove/discussion tools；
+- pipeline create/retry/cancel tools；
+- Docker Compose PostgreSQL profile 與 migration 文件。
+
+## v0.6 — Policy、observability、compatibility
 
 候選項目：
 
-- Client ID Metadata Documents（CIMD），並保留現有 DCR compatibility path；
-- transactional/shared OAuth storage backend，支援 HA / multiple replicas；
-- repository file reads/writes；
-- 適合時透過 GitLab API 建立 commit；
-- MR approval/review APIs；
-- pipeline retry/cancel/trigger tools；
-- labels、milestones、releases、members；
-- 更細緻的 project/tool policy。
+- per-tool allow/deny policy；
+- 更細的 group/project scoped policy；
+- OAuth sign-in、write、destructive、merge audit events；
+- Prometheus / OpenTelemetry operational metrics；
+- rate-limit / backpressure visibility；
+- GitLab Self-Managed version fixtures 與 capability probing；
+- labels、milestones、releases、members 與更多 CI/CD operations；
+- hosted deployment 的 secret / encryption-key rotation procedures。
 
 ## Compatibility and quality
 
 持續進行：
 
-- GitLab Self-Managed version fixtures；
 - GitLab.com 與代表性 Self-Managed 版本的 live OAuth interoperability tests；
 - API capability probing；
 - tool schema / OAuth endpoint contract tests；
-- authorization、encrypted persistence、write boundary security review；
-- 英文與繁中核心文件同步。
+- authorization、CIMD metadata fetch、encrypted persistence、write boundary security review；
+- 英文 / 繁中核心文件 parity。
 
-GitLab native MCP 仍可作為 optional alternative/backend path，但不是 dependency。
+GitLab native MCP 仍是 optional alternative，不是 dependency。
