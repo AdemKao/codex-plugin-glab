@@ -13,6 +13,28 @@ The format is inspired by Keep a Changelog, and plugin versions follow semantic 
 - Observability, audit events, and operational metrics for hosted deployments.
 - Additional GitLab release/member/milestone workflows.
 
+## [0.5.1] - 2026-08-23
+
+### Added
+
+- First-class ChatGPT remote MCP binding workflow for Issue #8.
+- `scripts/chatgpt_binding.py` with deterministic HTTPS `/mcp` URL validation and optional DNS/public-address checks.
+- `scripts/chatgpt_mcp_doctor.py` to verify Protected Resource Metadata, Authorization Server Metadata, and the unauthenticated `/mcp` OAuth challenge before connecting ChatGPT.
+- Workspace-specific `.chatgpt-setup.json` output documenting the remote MCP endpoint, App/connector ID, explicit ChatGPT App creation boundary, and doctor command.
+- CI coverage that builds a fake ChatGPT-bound variant and rejects HTTP, localhost, loopback, link-local, private-network, and non-`/mcp` remote URLs.
+
+### Changed
+
+- `scripts/build_chatgpt_variant.py` now requires both `--app-id` and `--mcp-url`, validates the remote endpoint for a ChatGPT deployment profile, consumes the source `.app.json.example` template, and leaves the portable localhost Codex configuration untouched.
+- ChatGPT setup documentation now makes the platform consent boundary explicit: this repository prepares and validates the binding, while the Custom MCP App itself must be explicitly created/connected in a supported ChatGPT workspace/surface.
+- Plugin, MCP package, and release version are synchronized at v0.5.1.
+
+### Security
+
+- ChatGPT remote binding generation rejects embedded URL credentials, query/fragment data, localhost, loopback, private, link-local, multicast, reserved, and unspecified literal IP targets.
+- The live doctor resolves DNS and rejects any resolved non-public address before making HTTP requests.
+- Generated workspace App IDs and setup artifacts remain under ignored `dist/` output and are not committed to the portable source plugin.
+
 ## [0.5.0] - 2026-08-23
 
 ### Added
