@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build a ChatGPT app-bound GitLab plugin variant.
+"""Build a workspace-bound GitLab plugin variant for an existing ChatGPT App.
 
+This is a workspace binding helper, not an OpenAI-native App Template generator.
 The source plugin remains portable and keeps the localhost MCP fallback for
-Codex. This script builds a workspace-specific ChatGPT variant after the user or
-workspace admin has explicitly created a Custom MCP App in ChatGPT.
+local Codex use. Run this helper only after the user or workspace admin has
+explicitly created or provisioned the target App/connector and obtained its ID.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from chatgpt_binding import BindingValidationError, validate_remote_mcp_url
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PLUGIN = ROOT / "plugins" / "gitlab"
 DEFAULT_OUTPUT = ROOT / "dist" / "gitlab-chatgpt"
-APP_TEMPLATE = SOURCE_PLUGIN / "app-template" / ".app.json.example"
+WORKSPACE_BINDING_EXAMPLE = SOURCE_PLUGIN / "workspace-binding" / ".app.json.example"
 PLACEHOLDER = "REPLACE_WITH_GITLAB_APP_OR_CONNECTOR_ID"
 APP_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]+$")
 
@@ -61,8 +62,8 @@ def load_json(path: Path, description: str) -> dict:
 def build(app_id: str, mcp_url: str, output: Path, force: bool) -> None:
     if not SOURCE_PLUGIN.is_dir():
         fail(f"source plugin not found: {SOURCE_PLUGIN}")
-    if not APP_TEMPLATE.is_file():
-        fail(f"ChatGPT app template not found: {APP_TEMPLATE}")
+    if not WORKSPACE_BINDING_EXAMPLE.is_file():
+        fail(f"workspace binding example not found: {WORKSPACE_BINDING_EXAMPLE}")
 
     try:
         mcp_url = validate_remote_mcp_url(mcp_url)
@@ -78,15 +79,15 @@ def build(app_id: str, mcp_url: str, output: Path, force: bool) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(SOURCE_PLUGIN, output)
 
-    app_manifest = load_json(APP_TEMPLATE, "ChatGPT app binding template")
+    app_manifest = load_json(WORKSPACE_BINDING_EXAMPLE, "workspace binding example")
     gitlab_binding = app_manifest.get("apps", {}).get("gitlab")
     if not isinstance(gitlab_binding, dict) or gitlab_binding.get("id") != PLACEHOLDER:
-        fail("ChatGPT app binding template does not contain the expected placeholder")
+        fail("workspace binding example does not contain the expected placeholder")
     gitlab_binding["id"] = app_id
 
-    template_dir = output / "app-template"
-    if template_dir.exists():
-        shutil.rmtree(template_dir)
+    binding_dir = output / "workspace-binding"
+    if binding_dir.exists():
+        shutil.rmtree(binding_dir)
 
     (output / ".app.json").write_text(
         json.dumps(app_manifest, indent=2) + "\n",
@@ -103,14 +104,16 @@ def build(app_id: str, mcp_url: str, output: Path, force: bool) -> None:
         encoding="utf-8",
     )
 
-    # The App ID is the actual ChatGPT binding. This setup metadata documents
-    # which remote endpoint that workspace App must be configured to use. It is
-    # generated under ignored dist/ and never changes the portable source plugin.
+    # The App/connector ID is the actual workspace binding. This metadata records
+    # the remote endpoint that the already-created workspace App is expected to
+    # use. It does not create, publish, or emulate an OpenAI managed App Template.
     setup = {
-        "profile": "chatgpt-remote-mcp",
+        "profile": "workspace-binding-helper",
         "mcp_url": mcp_url,
         "app_id": app_id,
+        "requires_existing_workspace_app_or_connector": True,
         "requires_explicit_chatgpt_app_creation": True,
+        "managed_workspace_app_template": "not-generated-by-this-repository",
         "doctor_command": f"python3 scripts/chatgpt_mcp_doctor.py --mcp-url {mcp_url}",
     }
     (output / ".chatgpt-setup.json").write_text(
@@ -118,26 +121,30 @@ def build(app_id: str, mcp_url: str, output: Path, force: bool) -> None:
         encoding="utf-8",
     )
 
-    print(f"Built ChatGPT-bound GitLab plugin: {output}")
+    print(f"Built workspace-bound GitLab plugin helper output: {output}")
     print(f"Remote MCP URL: {mcp_url}")
-    print("The source plugin and localhost Codex MCP configuration were not modified.")
-    print("The ChatGPT Custom MCP App must already exist in the target workspace.")
+    print("The source plugin and localhost Codex MCP fallback were not modified.")
+    print("The target ChatGPT App/connector must already exist in the workspace.")
+    print("This helper does not create or define an OpenAI managed workspace App Template.")
     print("Do not commit the generated workspace-specific output.")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build a GitLab plugin variant bound to a ChatGPT workspace Custom MCP App."
+        description=(
+            "Build a GitLab plugin workspace-binding helper variant for an existing "
+            "ChatGPT App/connector. This does not generate an OpenAI App Template."
+        )
     )
     parser.add_argument(
         "--app-id",
         required=True,
-        help="ChatGPT app/connector ID created in the target workspace",
+        help="existing ChatGPT workspace app/connector ID",
     )
     parser.add_argument(
         "--mcp-url",
         required=True,
-        help="public HTTPS MCP endpoint configured on that ChatGPT Custom MCP App",
+        help="public HTTPS /mcp endpoint configured on that workspace App/connector",
     )
     parser.add_argument(
         "--output",
